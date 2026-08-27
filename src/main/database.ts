@@ -2,6 +2,8 @@ import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { latestSchemaVersion, migrations } from './migrations';
+import { SqliteChronicleRepository } from './domain/repository';
+import { ChronicleDomainService } from './domain/service';
 import type { StorageInfo } from '../shared/contracts';
 
 interface VersionRow {
@@ -15,12 +17,14 @@ interface CountRow {
 export class ChronicleDatabase {
   readonly path: string;
   readonly info: StorageInfo;
+  readonly domain: ChronicleDomainService;
   private database: DatabaseSync | undefined;
 
   private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo) {
     this.database = database;
     this.path = databasePath;
     this.info = info;
+    this.domain = new ChronicleDomainService(new SqliteChronicleRepository(database));
   }
 
   static async open(userDataDirectory: string): Promise<ChronicleDatabase> {
@@ -133,3 +137,4 @@ async function fileHasContent(filePath: string): Promise<boolean> {
     throw error;
   }
 }
+

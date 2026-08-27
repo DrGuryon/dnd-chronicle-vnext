@@ -1,6 +1,6 @@
 # D&D Chronicle vNext
 
-První funkční základ nové Windows aplikace: prázdný Electron shell, lokální SQLite databáze s migracemi, NSIS installer a integrovaný updater.
+Funkční základ nové Windows aplikace: Electron shell, lokální SQLite databáze s verzovaným doménovým modelem, NSIS installer a integrovaný updater.
 
 ## Rychlý start
 
@@ -30,6 +30,8 @@ Databáze není součástí instalace. Za běhu se vytvoří v Electron `userDat
 
 Přeinstalace ani odinstalace aplikace tento adresář nemaže. Před každou budoucí migrací již existující databáze se do `backups/` vytvoří konzistentní SQLite backup.
 
+Schéma v2 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Obsahuje základ Campaign, Character, Creature, Item a hierarchických Location, časově omezené aliasy a vztahy, minimální Knowledge foundation a historii umístění předmětů. Renderer SQL přímo nepoužívá; zápisy vedou přes transakční doménovou service/repository vrstvu. Podrobnosti jsou v [`docs/architecture.md`](docs/architecture.md).
+
 ## Aktualizace
 
 Lokální build úmyslně nemá natvrdo zadaný cizí release server. Release workflow při tagu `v*` doplní aktuální GitHub repository do `app-update.yml`, sestaví NSIS installer, `latest.yml` i blockmap a publikuje je do GitHub Releases. Instalovaná aplikace pak:
@@ -50,3 +52,4 @@ Pro produkční distribuci nastavte repozitářové secrets `WIN_CSC_LINK` a `WI
 4. Pushněte tag. GitHub Actions provede testy, build a publikaci.
 
 Nikdy nemíchejte installer a `latest.yml` z různých buildů; updater ověřuje SHA-512 metadata.
+
