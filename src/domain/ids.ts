@@ -1,15 +1,30 @@
 import { randomUUID } from 'node:crypto';
 
 export type DomainIdPrefix =
+  | 'action'
   | 'alias'
   | 'campaign'
   | 'char'
+  | 'choice'
+  | 'class'
   | 'creature'
+  | 'def'
+  | 'effect'
   | 'event'
+  | 'feature'
+  | 'hitdie'
   | 'item'
   | 'knowledge'
   | 'loc'
+  | 'movement'
+  | 'pool'
+  | 'proficiency'
   | 'relation'
+  | 'resource'
+  | 'sense'
+  | 'defense'
+  | 'spell'
+  | 'spellsource'
   | 'state';
 
 export function createDomainId(prefix: DomainIdPrefix): string {
@@ -22,4 +37,3 @@ export function requireDomainId(id: string, prefix: DomainIdPrefix): string {
   }
   return id;
 }
-

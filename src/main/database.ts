@@ -4,6 +4,9 @@ import { backup, DatabaseSync } from 'node:sqlite';
 import { latestSchemaVersion, migrations } from './migrations';
 import { SqliteChronicleRepository } from './domain/repository';
 import { ChronicleDomainService } from './domain/service';
+import { SqliteCharacterRepository } from './character/repository';
+import { CharacterDomainService } from './character/service';
+import { RulesEngineRegistry } from '../rules/rules-engine';
 import type { StorageInfo } from '../shared/contracts';
 
 interface VersionRow {
@@ -18,13 +21,20 @@ export class ChronicleDatabase {
   readonly path: string;
   readonly info: StorageInfo;
   readonly domain: ChronicleDomainService;
+  readonly characters: CharacterDomainService;
   private database: DatabaseSync | undefined;
 
   private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo) {
     this.database = database;
     this.path = databasePath;
     this.info = info;
-    this.domain = new ChronicleDomainService(new SqliteChronicleRepository(database));
+    const repository = new SqliteChronicleRepository(database);
+    this.domain = new ChronicleDomainService(repository);
+    this.characters = new CharacterDomainService(
+      new SqliteCharacterRepository(database),
+      repository,
+      new RulesEngineRegistry(),
+    );
   }
 
   static async open(userDataDirectory: string): Promise<ChronicleDatabase> {
@@ -137,4 +147,3 @@ async function fileHasContent(filePath: string): Promise<boolean> {
     throw error;
   }
 }
-

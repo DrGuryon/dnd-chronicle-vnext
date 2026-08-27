@@ -1,4 +1,4 @@
-# Architecture — domain model foundation
+# Architecture — complete character domain
 
 ## Hranice procesu
 
@@ -14,16 +14,46 @@ SQLite je lokální source of truth. Soubor je v `app.getPath('userData')/data/c
 
 Schéma používá monotónní `PRAGMA user_version` a auditní tabulku `schema_migrations`. Migrace běží v `BEGIN IMMEDIATE` transakci. Aplikace odmítne otevřít databázi s novějším schématem, aby downgrade nepoškodil data. Před každým skutečným upgradem existující databáze vytvoří SQLite backup do `userData/backups`.
 
-Schéma v2 rozšiřuje původní bezpečný storage základ o doménový model. Stávající databáze v1 dostane před migrací konzistentní backup; čistá i existující databáze procházejí stejným monotónním migration runnerem.
+Schéma v3 rozšiřuje storage a Milestone 2 domain foundation o praktický Character model. Databáze v1 postupuje přes v2 do v3 a databáze v2 přímo do v3; před upgradem vždy vznikne konzistentní backup. Čistá i existující databáze procházejí stejným monotónním migration runnerem.
 
 ## Definition, Instance, State, Event
 
-- **Definition** je znovupoužitelná pravidlová definice nezávislá na konkrétní kampani. `item_definitions` je zatím pouze minimální referenční základ pro budoucí ruleset data.
+- **Definition** je znovupoužitelná pravidlová definice nezávislá na konkrétní postavě. `rule_definitions` drží stabilní ID, typ, ruleset/verzi, textový původ a volitelná strukturovaná metadata. Core, 2014, 2024 i homebrew obsah používají stejné schéma.
 - **Instance** je konkrétní entita kampaně se stabilním string ID. Sdílená identita je v `entities`, typová data v `locations`, `characters`, `creatures` a `items`.
 - **State** je rychle dostupný současný stav, například `characters.current_location_id` nebo právě jeden řádek v `item_current_placements`.
 - **Event** je neměnný historický bod. Každá kampaň má jednoznačnou rostoucí `sequence`, takže pořadí nezávisí na tom, zda svět používá reálný kalendář.
 
-Doménové TypeScript typy jsou v `src/domain` a neznají SQLite. Main-process service/repository vrstva v `src/main/domain` mapuje čistý model na relační schéma, ověřuje hranice kampaní a provádí transakce.
+Doménové TypeScript typy jsou v `src/domain` a neznají SQLite. Main-process service/repository vrstvy v `src/main/domain` a `src/main/character` mapují čistý model na relační schéma, ověřují hranice kampaní a provádějí transakce.
+
+## Definition reference model a Character composition
+
+Character nekopíruje Species, Background, Class, Subclass, Feat, Spell ani Condition. Ukládá jejich stabilní definition ID a pouze data specifická pro postavu: biography, origin choices/overrides, multiclass progression, ability score state a získané prvky. Nullable biography pole zachovávají rozdíl mezi neznámou hodnotou a vyplněným údajem.
+
+`character_classes` dovoluje více class řádků a `totalLevel` vzniká součtem jejich úrovní. Ability score se skládá z base score, permanentního modifieru nebo override a aktivních Effect modifierů. Rozlišuje tedy „Strength +2“ od „Strength becomes 19“ bez přepisování zdrojových definic.
+
+Proficiency je obecný záznam pro saves, skills, weapons, armor, shields, tools, languages i custom cíl. Nese level (`none`, `half`, `proficient`, `expertise`) a povinnou source referenci. Výsledný bonus se počítá z ability modifieru a RulesEngine.
+
+## Feature, Resource a Action
+
+- **Feature** je získaná schopnost s volitelnou Definition, source, availability, choices a custom textem. Divine Smite, Pact of the Blade, War Caster i homebrew Oath používají stejné tabulky.
+- **Resource** je současný číselný pool libovolné Entity. Reset určuje data (`shortRest`, `longRest`, `shortOrLongRest`, `dawn`, `manual`, `custom`), takže Channel Divinity, Lay on Hands, class dice i magic-item charges nepotřebují vlastní sloupce.
+- **Action** popisuje způsob aktivace a strukturovanou mechaniku: attack/range/target, damage components, saving throw, effect references a resource costs. Není plným combat enginem.
+
+Konkrétní class ability nejsou hardcoded, protože jejich počet, wording i pravidla se mezi 2014, 2024 a homebrew mění. Skládání Definition + Feature + Resource + Action dovoluje přidat nový obsah bez migrace databáze.
+
+## Combat, spellcasting a Effects
+
+Combat current state drží HP, temporary HP, AC vstupy/override, initiative modifier, death saves a inspiration. Hit Dice jsou samostatné pooly, takže multiclass může současně používat například d10 a d8. Movement, senses a defenses jsou kolekce se source referencemi; nejsou zploštěné do jednoho speed nebo jednoho textového pole.
+
+`SpellcastingSource` odděluje Paladin Spellcasting od Warlock Pact Magic a definuje ability, mechanismus a lokální attack/DC modifiers. `CharacterSpell` pouze odkazuje na Spell Definition a příslušný source. Standardní, pact i custom sloty jsou samostatné `SpellSlotPool` záznamy s vlastním levelem a resetem.
+
+`active_effects` je společná foundation pro buffy, debuffy i Conditions. Effect nese začátek/konec v Eventech, duration, concentration a strukturované modifiers. `character_concentration` ukazuje právě jeden aktivní Effect; zahájení nové koncentrace atomicky ukončí předchozí Effect a přepne referenci.
+
+## Current state, historie a RulesEngine
+
+Rychle čtený současný stav zůstává v normalizovaných current-state tabulkách. Významné operace jako změna HP, spotřeba/obnova Resource nebo slotu, rest reset, Effect/Condition, concentration, Hit Die a death save vloží Event, změní stav a přidají cílený `state_change_history` řádek v jedné transakci. Celý Character se po každém kroku nesnapshotuje.
+
+Ruleset-specific odvozené hodnoty nejsou univerzální pravda Chronicle service. `RulesEngineRegistry` volí implementaci podle `Campaign.rulesetId` a `rulesetVersion`; dnd5e 2014 a 2024 implementují ability modifier, proficiency bonus/contribution, initiative a spell attack/save DC. Vlastní systém může zaregistrovat další engine bez změny storage modelu.
 
 ## Entity identity a vztahy
 
@@ -61,7 +91,7 @@ Při každém kroku udržuje množinu navštívených item ID. Cyklus tedy odmí
 
 ## Proč renderer nezapisuje SQL
 
-UI nesmí skládat SQL ani měnit několik tabulek postupně. Budoucí preload příkazy budou volat `ChronicleDomainService`, který vynutí invarianty a transakční hranici. Stejný tvar je připravený pro budoucí `TurnTransaction`: jeden příběhový krok může vytvořit Event a několik změn stavu buď celý, nebo vůbec.
+UI nesmí skládat SQL ani měnit několik tabulek postupně. Budoucí preload příkazy budou volat `ChronicleDomainService` nebo `CharacterDomainService`, které vynutí invarianty a transakční hranici. Stejný tvar je připravený pro budoucí `TurnTransaction`: jeden příběhový krok může vytvořit Event a několik změn stavu buď celý, nebo vůbec.
 
 ## Update pipeline
 
@@ -73,5 +103,4 @@ Produkční vydání musí být Authenticode podepsané. Build konfigurace zapne
 
 ## Hranice tohoto milestone
 
-Schéma záměrně neobsahuje kompletní D&D 5E character sheet, spell katalog, monster stat block, AI retrieval ani import starého formátu. Tyto vrstvy mají stavět na stabilní identitě, Eventech a transakčních službách místo rozšiřování jednoho univerzálního JSON dokumentu.
-
+Milestone poskytuje Character doménu a několik testovacích definitions, ne finální Character panel ani kompletní SRD katalog. Neobsahuje AI retrieval/tool calling, OpenAI orchestration, lokální LLM ani plný combat engine. Tyto vrstvy mají stavět na stabilní identitě, Definition referencích, Eventech a transakčních službách.

@@ -30,7 +30,7 @@ Databáze není součástí instalace. Za běhu se vytvoří v Electron `userDat
 
 Přeinstalace ani odinstalace aplikace tento adresář nemaže. Před každou budoucí migrací již existující databáze se do `backups/` vytvoří konzistentní SQLite backup.
 
-Schéma v2 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Obsahuje základ Campaign, Character, Creature, Item a hierarchických Location, časově omezené aliasy a vztahy, minimální Knowledge foundation a historii umístění předmětů. Renderer SQL přímo nepoužívá; zápisy vedou přes transakční doménovou service/repository vrstvu. Podrobnosti jsou v [`docs/architecture.md`](docs/architecture.md).
+Schéma v3 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Vedle Campaign, Entity, Location a Knowledge foundation obsahuje skládaný D&D Character model: multiclass, abilities/proficiencies, combat state, Feature/Resource/Action, spellcasting a společný Effect/Condition základ. Renderer SQL přímo nepoužívá; zápisy vedou přes transakční doménovou service/repository vrstvu. Podrobnosti jsou v [`docs/architecture.md`](docs/architecture.md).
 
 ## Aktualizace
 
@@ -48,8 +48,7 @@ Pro produkční distribuci nastavte repozitářové secrets `WIN_CSC_LINK` a `WI
 
 1. Zvyšte `version` v `package.json`.
 2. Commitněte změnu.
-3. Vytvořte odpovídající tag, např. `v0.2.0`.
+3. Vytvořte odpovídající tag, např. `v0.3.0`.
 4. Pushněte tag. GitHub Actions provede testy, build a publikaci.
 
 Nikdy nemíchejte installer a `latest.yml` z různých buildů; updater ověřuje SHA-512 metadata.
-
