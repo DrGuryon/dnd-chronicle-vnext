@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+.npm-cache/
+*.log
+*.db
+*.db-wal
+*.db-shm
+.env
+
