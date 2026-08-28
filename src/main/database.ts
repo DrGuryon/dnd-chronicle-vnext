@@ -6,6 +6,9 @@ import { SqliteChronicleRepository } from './domain/repository';
 import { ChronicleDomainService } from './domain/service';
 import { SqliteCharacterRepository } from './character/repository';
 import { CharacterDomainService } from './character/service';
+import { SqliteUiPreferencesRepository } from './preferences/repository';
+import { UiPreferencesService } from './preferences/service';
+import { ChronicleReadModelService } from './read-model/service';
 import { RulesEngineRegistry } from '../rules/rules-engine';
 import type { StorageInfo } from '../shared/contracts';
 
@@ -22,6 +25,8 @@ export class ChronicleDatabase {
   readonly info: StorageInfo;
   readonly domain: ChronicleDomainService;
   readonly characters: CharacterDomainService;
+  readonly preferences: UiPreferencesService;
+  readonly readModels: ChronicleReadModelService;
   private database: DatabaseSync | undefined;
 
   private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo) {
@@ -34,6 +39,16 @@ export class ChronicleDatabase {
       new SqliteCharacterRepository(database),
       repository,
       new RulesEngineRegistry(),
+    );
+    this.preferences = new UiPreferencesService(
+      new SqliteUiPreferencesRepository(database),
+      this.domain,
+      repository,
+    );
+    this.readModels = new ChronicleReadModelService(
+      this.domain,
+      this.characters,
+      this.preferences,
     );
   }
 

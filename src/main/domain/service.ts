@@ -144,6 +144,11 @@ export class ChronicleDomainService {
     return this.repository.getCharacter(id);
   }
 
+  listCharacters(campaignId?: string): Character[] {
+    if (campaignId) this.requireCampaign(campaignId);
+    return this.repository.listCharacters(campaignId);
+  }
+
   createCreature(input: CreateCreatureInput): Creature {
     return this.repository.transaction(() => {
       this.requireCampaign(input.campaignId);
@@ -220,6 +225,26 @@ export class ChronicleDomainService {
 
   getItem(id: string): Item | undefined {
     return this.repository.getItem(id);
+  }
+
+  listItemsHeldByCharacter(characterId: string): Item[] {
+    this.requireCharacter(characterId);
+    return this.repository.listItemsHeldByCharacter(characterId);
+  }
+
+  listLocationChildren(locationId: string): Location[] {
+    this.requireEntity(locationId, undefined, 'Location');
+    return this.repository.listLocationChildren(locationId);
+  }
+
+  listAliases(entityId: string): EntityAlias[] {
+    this.requireEntity(entityId);
+    return this.repository.listAliases(entityId);
+  }
+
+  listRelationsForEntity(entityId: string): EntityRelation[] {
+    this.requireEntity(entityId);
+    return this.repository.listRelationsForEntity(entityId);
   }
 
   getItemPlacement(itemId: string): ItemPlacement {
@@ -562,4 +587,3 @@ function requiredText(value: string, label: string): string {
 function timestamp(): string {
   return new Date().toISOString();
 }
-

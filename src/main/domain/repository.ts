@@ -139,6 +139,23 @@ export class SqliteChronicleRepository {
     `).get(id) as unknown as Character | undefined;
   }
 
+  listCharacters(campaignId?: string): Character[] {
+    const where = campaignId ? 'WHERE e.campaign_id = ?' : '';
+    const statement = this.database.prepare(`
+      SELECT e.id, e.campaign_id AS campaignId, e.entity_type AS entityType,
+             e.name, e.description, e.image_resource_id AS imageResourceId,
+             e.created_event_id AS createdEventId, e.created_at AS createdAt,
+             e.updated_at AS updatedAt, c.full_name AS fullName,
+             c.character_type AS characterType, c.current_location_id AS currentLocationId,
+             c.current_life_state_id AS currentLifeStateId
+      FROM entities e
+      JOIN characters c ON c.entity_id = e.id
+      ${where}
+      ORDER BY e.created_at, e.id
+    `);
+    return (campaignId ? statement.all(campaignId) : statement.all()) as unknown as Character[];
+  }
+
   insertCreature(creature: Creature): void {
     this.insertEntity(creature);
     this.database.prepare(`
@@ -183,6 +200,35 @@ export class SqliteChronicleRepository {
       JOIN items i ON i.entity_id = e.id
       WHERE e.id = ?
     `).get(id) as unknown as Item | undefined;
+  }
+
+  listItemsHeldByCharacter(characterId: string): Item[] {
+    return this.database.prepare(`
+      SELECT e.id, e.campaign_id AS campaignId, e.entity_type AS entityType,
+             e.name, e.description, e.image_resource_id AS imageResourceId,
+             e.created_event_id AS createdEventId, e.created_at AS createdAt,
+             e.updated_at AS updatedAt, i.item_definition_id AS itemDefinitionId,
+             i.quantity
+      FROM item_current_placements p
+      JOIN items i ON i.entity_id = p.item_id
+      JOIN entities e ON e.id = i.entity_id
+      WHERE p.placement_type = 'character' AND p.character_id = ?
+      ORDER BY e.name, e.id
+    `).all(characterId) as unknown as Item[];
+  }
+
+  listLocationChildren(parentLocationId: string): Location[] {
+    return this.database.prepare(`
+      SELECT e.id, e.campaign_id AS campaignId, e.entity_type AS entityType,
+             e.name, e.description, e.image_resource_id AS imageResourceId,
+             e.created_event_id AS createdEventId, e.created_at AS createdAt,
+             e.updated_at AS updatedAt, l.parent_location_id AS parentLocationId,
+             l.location_type AS locationType
+      FROM locations l
+      JOIN entities e ON e.id = l.entity_id
+      WHERE l.parent_location_id = ?
+      ORDER BY e.name, e.id
+    `).all(parentLocationId) as unknown as Location[];
   }
 
   getEntityIdentity(id: string): EntityIdentityRow | undefined {
@@ -397,6 +443,14 @@ export class SqliteChronicleRepository {
     );
   }
 
+  listAliases(entityId: string): EntityAlias[] {
+    return this.database.prepare(`
+      SELECT id, entity_id AS entityId, alias, used_by_entity_id AS usedByEntityId,
+             from_event_id AS fromEventId, to_event_id AS toEventId
+      FROM entity_aliases WHERE entity_id = ? ORDER BY rowid
+    `).all(entityId) as unknown as EntityAlias[];
+  }
+
   insertRelation(relation: EntityRelation): void {
     this.database.prepare(`
       INSERT INTO entity_relations(
@@ -413,6 +467,23 @@ export class SqliteChronicleRepository {
       relation.toEventId,
       relation.metadata === null ? null : JSON.stringify(relation.metadata),
     );
+  }
+
+  listRelationsForEntity(entityId: string): EntityRelation[] {
+    const rows = this.database.prepare(`
+      SELECT id, campaign_id AS campaignId, source_entity_id AS sourceEntityId,
+             target_entity_id AS targetEntityId, relation_type AS relationType,
+             from_event_id AS fromEventId, to_event_id AS toEventId, metadata
+      FROM entity_relations
+      WHERE source_entity_id = ? OR target_entity_id = ?
+      ORDER BY rowid
+    `).all(entityId, entityId) as unknown as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      ...row,
+      metadata: row.metadata == null
+        ? null
+        : JSON.parse(String(row.metadata)) as Readonly<Record<string, unknown>>,
+    } as unknown as EntityRelation));
   }
 
   insertKnowledge(record: KnowledgeRecord): void {
@@ -516,4 +587,3 @@ function rowToPlacement(row: PlacementRow): ItemPlacement {
 function invalidPlacementRow(row: PlacementRow): Error {
   return new Error(`Databáze obsahuje neplatný placement typu ${row.placementType}.`);
 }
-

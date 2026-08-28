@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import electronLog from 'electron-log/main';
 import path from 'node:path';
 import { ChronicleDatabase } from './database';
+import { ChronicleIpcService } from './ipc/chronicle-ipc-service';
 import { UpdateController } from './updater';
 import type { BootstrapInfo } from '../shared/contracts';
 
@@ -73,9 +75,9 @@ app.on('before-quit', closeDatabase);
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 920,
+    width: 1440,
+    height: 860,
+    minWidth: 1024,
     minHeight: 620,
     backgroundColor: '#11100f',
     show: false,
@@ -112,9 +114,42 @@ function registerIpc(): void {
       update: updateController.getState(),
     };
   });
+  if (!chronicleDatabase) throw new Error('Databáze ještě není připravená.');
+  const chronicle = new ChronicleIpcService(chronicleDatabase);
+  handle('character:get-cockpit', (characterId) => chronicle.getCharacterCockpit(characterId));
+  handle('entity:get-summary', (request) => chronicle.getEntitySummary(request));
+  handle('entity:get-card', (request) => chronicle.getEntityCard(request));
+  handle('character:change-hp', (command) => chronicle.changeHitPoints(command));
+  handle('character:set-temporary-hp', (command) => chronicle.setTemporaryHitPoints(command));
+  handle('character:spend-resource', (command) => chronicle.spendResource(command));
+  handle('character:restore-resource', (command) => chronicle.restoreResource(command));
+  handle('character:spend-spell-slot', (command) => chronicle.spendSpellSlot(command));
+  handle('character:restore-spell-slot', (command) => chronicle.restoreSpellSlot(command));
+  handle('character:set-inspiration', (command) => chronicle.setInspiration(command));
+  handle('character:record-death-save', (command) => chronicle.recordDeathSave(command));
+  handle('character:end-concentration', (command) => chronicle.endConcentration(command));
+  handle('character:remove-condition', (command) => chronicle.removeCondition(command));
+  handle('character:end-effect', (command) => chronicle.endEffect(command));
+  handle('character:short-rest', (command) => chronicle.takeShortRest(command));
+  handle('character:long-rest', (command) => chronicle.takeLongRest(command));
+  handle('ui:save-character-panel-preferences', (preferences) => (
+    chronicle.saveCharacterPanelPreferences(preferences)
+  ));
   ipcMain.handle('updater:get-state', () => updateController?.getState());
   ipcMain.handle('updater:check', () => updateController?.check());
   ipcMain.handle('updater:install', () => updateController?.install());
+}
+
+function handle(channel: string, operation: (input: unknown) => unknown): void {
+  ipcMain.handle(channel, (_event, input) => {
+    try {
+      return operation(input);
+    } catch (error) {
+      electronLog.error(`[IPC ${channel}]`, error);
+      const message = error instanceof Error ? error.message : 'Požadavek se nepodařilo dokončit.';
+      throw new Error(message);
+    }
+  });
 }
 
 function closeDatabase(): void {

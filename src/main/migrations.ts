@@ -517,6 +517,26 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'create_character_panel_preferences',
+    up(database) {
+      database.exec(`
+        CREATE TABLE character_panel_preferences (
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          character_id TEXT NOT NULL REFERENCES characters(entity_id) ON DELETE CASCADE,
+          section_order TEXT NOT NULL,
+          collapsed_sections TEXT NOT NULL,
+          panel_width INTEGER NOT NULL CHECK (panel_width BETWEEN 300 AND 720),
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (campaign_id, character_id)
+        ) STRICT;
+
+        CREATE UNIQUE INDEX character_panel_preferences_character_idx
+          ON character_panel_preferences(character_id);
+      `);
+    },
+  },
 ];
 
 export const latestSchemaVersion = migrations.at(-1)?.version ?? 0;

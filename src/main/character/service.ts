@@ -310,6 +310,21 @@ export class CharacterDomainService {
     return this.repository.listMovements(characterId);
   }
 
+  listEffectiveMovements(characterId: string): CharacterMovement[] {
+    const movements = this.listMovements(characterId);
+    const modifiers = this.effectModifiers(characterId).filter(
+      (modifier): modifier is Extract<EffectModifier, { kind: 'movement.add' }> => (
+        modifier.kind === 'movement.add'
+      ),
+    );
+    return movements.map((movement) => ({
+      ...movement,
+      distance: movement.distance + modifiers
+        .filter((modifier) => modifier.movementType === movement.movementType)
+        .reduce((sum, modifier) => sum + modifier.value, 0),
+    }));
+  }
+
   addSense(input: WithOptionalId<CharacterSense>): CharacterSense {
     if (input.range !== null) {
       finiteNumber(input.range, 'Sense range');
@@ -358,6 +373,10 @@ export class CharacterDomainService {
     return this.repository.listFeatures(characterId);
   }
 
+  getFeature(id: string): CharacterFeature | undefined {
+    return this.repository.getFeature(id);
+  }
+
   addResource(input: WithOptionalId<EntityResource>): EntityResource {
     return this.transaction(() => {
       this.requireEntity(input.ownerEntityId);
@@ -391,6 +410,10 @@ export class CharacterDomainService {
     return this.repository.listActions(ownerEntityId);
   }
 
+  getAction(id: string): CharacterAction | undefined {
+    return this.repository.getAction(id);
+  }
+
   addSpellcastingSource(input: WithOptionalId<SpellcastingSource>): SpellcastingSource {
     return this.insertCharacterValue(input, 'spellsource', (value) => this.repository.insertSpellcastingSource(value));
   }
@@ -407,6 +430,10 @@ export class CharacterDomainService {
       this.getProficiencyBonus(source.characterId),
       source.attackModifier,
     );
+  }
+
+  getSpellcastingSource(id: string): SpellcastingSource | undefined {
+    return this.repository.getSpellcastingSource(id);
   }
 
   getSpellSaveDc(sourceId: string): number {
@@ -504,6 +531,18 @@ export class CharacterDomainService {
     });
   }
 
+  restoreSpellSlot(poolId: string, event: EventDraft): StateChangeResult<SpellSlotPool> {
+    return this.transaction(() => {
+      const pool = this.requireSlotPool(poolId);
+      if (pool.current >= pool.maximum) throw new Error(`Spell slot pool ${poolId} je už plný.`);
+      const recorded = this.insertEventForEntity(pool.characterId, event);
+      const state = { ...pool, current: pool.current + 1 };
+      this.repository.updateSlotPoolCurrent(pool.id, state.current);
+      this.recordState(pool.characterId, recorded.id, 'spellSlot', pool.id, pool.current, state.current);
+      return { state, eventId: recorded.id };
+    });
+  }
+
   resetResourcesForShortRest(characterId: string, event: EventDraft): StateChangeResult<{
     resources: EntityResource[];
     spellSlotPools: SpellSlotPool[];
@@ -582,6 +621,10 @@ export class CharacterDomainService {
     return effectId ? this.repository.getEffect(effectId) : undefined;
   }
 
+  getEffect(id: string): ActiveEffect | undefined {
+    return this.repository.getEffect(id);
+  }
+
   listActiveEffects(entityId: string): ActiveEffect[] {
     this.requireEntity(entityId);
     return this.repository.listActiveEffects(entityId);
@@ -618,6 +661,28 @@ export class CharacterDomainService {
       const recorded = this.insertEventForEntity(characterId, event);
       this.repository.upsertCombatState(next);
       this.recordState(characterId, recorded.id, 'combat', key, previous, previous + 1);
+      return { state: next, eventId: recorded.id };
+    });
+  }
+
+  setInspiration(
+    characterId: string,
+    inspiration: boolean,
+    event: EventDraft,
+  ): StateChangeResult<CharacterCombatState> {
+    return this.transaction(() => {
+      const state = this.requireCombatState(characterId);
+      const recorded = this.insertEventForEntity(characterId, event);
+      const next = { ...state, inspiration };
+      this.repository.upsertCombatState(next);
+      this.recordState(
+        characterId,
+        recorded.id,
+        'combat',
+        'inspiration',
+        state.inspiration,
+        inspiration,
+      );
       return { state: next, eventId: recorded.id };
     });
   }

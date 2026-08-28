@@ -1,5 +1,7 @@
 import './styles.css';
 import type { BootstrapInfo, UpdateState } from '../shared/contracts';
+import { CharacterCockpitController } from './character-cockpit';
+import { EntityCardHost } from './entity-card';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 if (!appRoot) {
@@ -34,7 +36,7 @@ appRoot.innerHTML = `
       </div>
     </aside>
 
-    <main>
+    <main class="workspace-main">
       <header class="topbar">
         <div>
           <p class="eyebrow">NOVÝ ZAČÁTEK</p>
@@ -101,10 +103,15 @@ appRoot.innerHTML = `
         <span class="footer-ready"><i></i> systém připraven</span>
       </footer>
     </main>
+
+    <aside class="cockpit-panel" data-cockpit aria-label="Character Cockpit"></aside>
+    <dialog class="entity-card-dialog" data-entity-card-dialog aria-label="Detail entity"></dialog>
   </div>
 `;
 
 const updateButton = requireElement<HTMLButtonElement>('[data-update-action]');
+const cockpit = new CharacterCockpitController(requireElement<HTMLElement>('[data-cockpit]'));
+new EntityCardHost(requireElement<HTMLDialogElement>('[data-entity-card-dialog]'));
 let latestUpdateState: UpdateState;
 
 void loadBootstrap();
@@ -126,6 +133,7 @@ async function loadBootstrap(): Promise<void> {
   try {
     const info = await window.chronicle.getBootstrap();
     renderBootstrap(info);
+    await cockpit.load();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     renderUpdateState({ status: 'error', message: `Aplikaci se nepodařilo načíst: ${message}` });

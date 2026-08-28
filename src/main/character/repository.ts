@@ -396,6 +396,22 @@ export class SqliteCharacterRepository {
     } as unknown as CharacterFeature));
   }
 
+  getFeature(id: string): CharacterFeature | undefined {
+    const row = this.database.prepare(`
+      SELECT id, definition_id AS definitionId, character_id AS characterId,
+             source_type AS sourceType, source_id AS sourceId,
+             acquired_event_id AS acquiredEventId, enabled, custom_name AS customName,
+             custom_description AS customDescription, choices, metadata
+      FROM character_features WHERE id = ?
+    `).get(id) as unknown as Record<string, unknown> | undefined;
+    return row ? {
+      ...row,
+      enabled: Boolean(row.enabled),
+      choices: parseObject(row.choices),
+      metadata: parseObject(row.metadata),
+    } as unknown as CharacterFeature : undefined;
+  }
+
   insertResource(value: EntityResource): void {
     this.database.prepare(`
       INSERT INTO entity_resources(
@@ -456,6 +472,18 @@ export class SqliteCharacterRepository {
       ...row,
       mechanics: JSON.parse(String(row.mechanics)),
     } as unknown as CharacterAction));
+  }
+
+  getAction(id: string): CharacterAction | undefined {
+    const row = this.database.prepare(`
+      SELECT id, owner_entity_id AS ownerEntityId, name, action_type AS actionType,
+             source_type AS sourceType, source_id AS sourceId, mechanics
+      FROM entity_actions WHERE id = ?
+    `).get(id) as unknown as Record<string, unknown> | undefined;
+    return row ? {
+      ...row,
+      mechanics: JSON.parse(String(row.mechanics)),
+    } as unknown as CharacterAction : undefined;
   }
 
   insertSpellcastingSource(value: SpellcastingSource): void {

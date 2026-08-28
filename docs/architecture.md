@@ -1,10 +1,10 @@
-# Architecture — complete character domain
+# Architecture — Character Cockpit and Entity Cards
 
 ## Hranice procesu
 
 - **Main process** vlastní okna, SQLite connection a updater. Je jedinou vrstvou s přímým přístupem k disku.
 - **Preload bridge** publikuje úzké typované API. Renderer nedostává Node.js ani Electron API.
-- **Renderer** vykresluje prázdný shell a stav instalace, databáze a updateru.
+- **Renderer** vykresluje shell, Character Cockpit a Entity Cards výhradně ze serializovatelných read modelů.
 
 `contextIsolation`, Chromium sandbox a vypnuté `nodeIntegration` jsou povinné bezpečnostní hranice.
 
@@ -14,7 +14,32 @@ SQLite je lokální source of truth. Soubor je v `app.getPath('userData')/data/c
 
 Schéma používá monotónní `PRAGMA user_version` a auditní tabulku `schema_migrations`. Migrace běží v `BEGIN IMMEDIATE` transakci. Aplikace odmítne otevřít databázi s novějším schématem, aby downgrade nepoškodil data. Před každým skutečným upgradem existující databáze vytvoří SQLite backup do `userData/backups`.
 
-Schéma v3 rozšiřuje storage a Milestone 2 domain foundation o praktický Character model. Databáze v1 postupuje přes v2 do v3 a databáze v2 přímo do v3; před upgradem vždy vznikne konzistentní backup. Čistá i existující databáze procházejí stejným monotónním migration runnerem.
+Schéma v3 rozšířilo storage a Milestone 2 domain foundation o praktický Character model. Schéma v4 přidává pouze `character_panel_preferences`: pořadí a sbalení sekcí a šířku panelu per Campaign + Character. Pravidlová ani odvozená data se do UI preferences neduplikují. Databáze v1, v2 i v3 postupují stejným monotónním migration runnerem do v4 a před upgradem vždy vznikne konzistentní backup.
+
+## Read model a IPC hranice
+
+`ChronicleReadModelService` skládá jeden kompaktní `CharacterCockpitView` z Domain/Character services a RulesEngine. HP/AC/initiative/proficiency bonus, efektivní abilities a movement, resources, oddělené standardní a Pact slot pools, spells, features, inventory summary, defenses, proficiencies, effects a concentration tak vznikají v main procesu. Renderer hodnoty pouze zobrazuje a nekopíruje pravidlové výpočty.
+
+Stejná vrstva řeší jedním dotazem `EntityCardView`. Obecná reference a Card Host proto používají stejný mechanismus pro Spell, Feature/Feat, Class/Subclass, Species/Background, Item, Location, Character, Condition/Effect a Action. Po otevření další reference se karta přidá na zásobník a návrat nevyžaduje znovu sestavovat data v rendereru.
+
+Preload zveřejňuje pouze explicitní queries a commands. Není v něm SQL, obecné `updateField` ani EventDraft z rendereru. `ChronicleIpcService` validuje runtime payload, ověří vlastnictví Resource/Slot/Effect, vytvoří kanonický Event type a summary, zavolá transakční domain operation a vrátí nově načtený cockpit. Chyba se zaloguje v main procesu a renderer dostane bezpečnou zprávu bez interního stack trace.
+
+### Current-state update flow
+
+```text
+Renderer intent → typed preload command → runtime validation → domain transaction
+                → Event + current state + history → fresh CharacterCockpitView
+```
+
+Renderer nepoužívá optimistic persistent state. Během malé změny zablokuje pouze příslušný ovládací prvek; při chybě zobrazí lokální hlášku a ponechá/obnoví skutečný databázový stav.
+
+### UI preferences
+
+Pořadí sekcí, collapsed state a šířka pravého panelu jsou jediná UI data v nové v4 tabulce. Preferences patří dvojici Campaign + Character, validují úplnou permutaci podporovaných sekcí a nejsou součástí Event historie. Změna preference proto nemění svět ani pravidla kampaně.
+
+### Renderer není source of truth
+
+Renderer drží pouze právě zobrazený read model a zásobník otevřených karet. Odvozené hodnoty, vlastnictví resource, platnost resetu a Event summary vznikají v main/doménové vrstvě. Reload panelu tak vždy rekonstruuje stejný stav z SQLite a aktivních Effectů.
 
 ## Definition, Instance, State, Event
 
@@ -91,7 +116,7 @@ Při každém kroku udržuje množinu navštívených item ID. Cyklus tedy odmí
 
 ## Proč renderer nezapisuje SQL
 
-UI nesmí skládat SQL ani měnit několik tabulek postupně. Budoucí preload příkazy budou volat `ChronicleDomainService` nebo `CharacterDomainService`, které vynutí invarianty a transakční hranici. Stejný tvar je připravený pro budoucí `TurnTransaction`: jeden příběhový krok může vytvořit Event a několik změn stavu buď celý, nebo vůbec.
+UI nesmí skládat SQL ani měnit několik tabulek postupně. Preload příkazy volají `ChronicleIpcService`, která je směruje do `CharacterDomainService`; ta vynutí invarianty a transakční hranici. Stejný tvar je připravený pro budoucí `TurnTransaction`: jeden příběhový krok může vytvořit Event a několik změn stavu buď celý, nebo vůbec.
 
 ## Update pipeline
 
@@ -103,4 +128,4 @@ Produkční vydání musí být Authenticode podepsané. Build konfigurace zapne
 
 ## Hranice tohoto milestone
 
-Milestone poskytuje Character doménu a několik testovacích definitions, ne finální Character panel ani kompletní SRD katalog. Neobsahuje AI retrieval/tool calling, OpenAI orchestration, lokální LLM ani plný combat engine. Tyto vrstvy mají stavět na stabilní identitě, Definition referencích, Eventech a transakčních službách.
+Milestone poskytuje funkční kompaktní Character Cockpit, společnou Entity Card infrastrukturu, typované query/command API a per-character UI preferences. Není to kompletní Character editor, inventory manager ani plný SRD katalog. Neobsahuje AI retrieval/tool calling, OpenAI orchestration, lokální LLM ani plný combat engine. Tyto vrstvy mají stavět na stabilní identitě, Definition referencích, Eventech a transakčních službách.
