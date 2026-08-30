@@ -31,9 +31,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $releaseVersion = $env:GITHUB_REF_NAME.TrimStart('v')
+          $canonicalInstaller = "release\dnd-chronicle-vnext-setup-$releaseVersion.exe"
+          $canonicalBlockmap = "$canonicalInstaller.blockmap"
+          Copy-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe" -Destination $canonicalInstaller
+          Copy-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe.blockmap" -Destination $canonicalBlockmap
+
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" | ConvertFrom-Json
+          foreach ($asset in $release.assets | Where-Object { $_.name -like 'D.D-Chronicle-vNext-Setup-*' }) {
+            gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/releases/assets/$($asset.id)"
+          }
+
           $assets = @(
-            Get-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe"
-            Get-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe.blockmap"
+            Get-Item -LiteralPath $canonicalInstaller
+            Get-Item -LiteralPath $canonicalBlockmap
             Get-Item -LiteralPath 'release\latest.yml'
           )
           gh release upload $env:GITHUB_REF_NAME @($assets.FullName) --clobber
