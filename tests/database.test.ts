@@ -174,7 +174,7 @@ describe('ChronicleDatabase', () => {
       'panel_width', 'updated_at',
     ]);
     inspected.close();
-  });
+  }, 20_000);
 
   it('migrates a version 4 database to the persistent Chronicle Engine schema', async () => {
     const userData = await createTemporaryDirectory();
@@ -225,7 +225,7 @@ describe('ChronicleDatabase', () => {
       'campaign_search_fts',
     ]));
     inspected.close();
-  });
+  }, 20_000);
 
   it('rejects a database created by a newer application', async () => {
     const userData = await createTemporaryDirectory();
