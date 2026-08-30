@@ -490,8 +490,9 @@ export class SqliteChronicleRepository {
     this.database.prepare(`
       INSERT INTO knowledge_records(
         id, campaign_id, subject_entity_id, observer_entity_id, knowledge_type,
-        value_text, reference_entity_id, from_event_id, to_event_id, confidence, source
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        value_text, reference_entity_id, from_event_id, to_event_id, confidence, source,
+        visibility_scope
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       record.id,
       record.campaignId,
@@ -504,6 +505,7 @@ export class SqliteChronicleRepository {
       record.toEventId,
       record.confidence,
       record.source,
+      record.visibilityScope,
     );
   }
 

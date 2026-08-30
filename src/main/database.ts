@@ -11,6 +11,9 @@ import { UiPreferencesService } from './preferences/service';
 import { ChronicleReadModelService } from './read-model/service';
 import { RulesEngineRegistry } from '../rules/rules-engine';
 import type { StorageInfo } from '../shared/contracts';
+import { ChronicleEngineService } from './engine/service';
+import { TurnTransactionService } from './engine/turn-transaction-service';
+import { ChronicleOrchestrator } from './engine/orchestrator';
 
 interface VersionRow {
   user_version: number;
@@ -27,6 +30,9 @@ export class ChronicleDatabase {
   readonly characters: CharacterDomainService;
   readonly preferences: UiPreferencesService;
   readonly readModels: ChronicleReadModelService;
+  readonly engine: ChronicleEngineService;
+  readonly turnTransactions: TurnTransactionService;
+  readonly orchestrator: ChronicleOrchestrator;
   private database: DatabaseSync | undefined;
 
   private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo) {
@@ -45,10 +51,14 @@ export class ChronicleDatabase {
       this.domain,
       repository,
     );
+    this.engine = new ChronicleEngineService(database, this.domain, this.characters);
+    this.turnTransactions = new TurnTransactionService(database, this.domain, this.characters);
+    this.orchestrator = new ChronicleOrchestrator(this.engine, this.turnTransactions);
     this.readModels = new ChronicleReadModelService(
       this.domain,
       this.characters,
       this.preferences,
+      () => this.engine.getActivePlayerCharacterId(),
     );
   }
 
@@ -62,6 +72,7 @@ export class ChronicleDatabase {
 
     const existed = await fileHasContent(databasePath);
     const database = new DatabaseSync(databasePath);
+    database.function('chronicle_normalize', (value: unknown) => normalizeForLookup(String(value ?? '')));
     database.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
 
     try {
@@ -161,4 +172,8 @@ async function fileHasContent(filePath: string): Promise<boolean> {
     }
     throw error;
   }
+}
+
+function normalizeForLookup(value: string): string {
+  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('cs-CZ');
 }

@@ -2,6 +2,7 @@ import './styles.css';
 import type { BootstrapInfo, UpdateState } from '../shared/contracts';
 import { CharacterCockpitController } from './character-cockpit';
 import { EntityCardHost } from './entity-card';
+import { RuntimeControls } from './runtime-controls';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 if (!appRoot) {
@@ -44,6 +45,8 @@ appRoot.innerHTML = `
         </div>
         <div class="version-pill">verze <span data-app-version>…</span></div>
       </header>
+
+      <section class="runtime-controls" data-runtime-controls aria-label="Aktivní scéna"></section>
 
       <section class="hero">
         <div class="hero-copy">
@@ -111,6 +114,10 @@ appRoot.innerHTML = `
 
 const updateButton = requireElement<HTMLButtonElement>('[data-update-action]');
 const cockpit = new CharacterCockpitController(requireElement<HTMLElement>('[data-cockpit]'));
+const runtimeControls = new RuntimeControls(
+  requireElement<HTMLElement>('[data-runtime-controls]'),
+  (characterId) => cockpit.load(characterId),
+);
 new EntityCardHost(requireElement<HTMLDialogElement>('[data-entity-card-dialog]'));
 let latestUpdateState: UpdateState;
 
@@ -133,6 +140,7 @@ async function loadBootstrap(): Promise<void> {
   try {
     const info = await window.chronicle.getBootstrap();
     renderBootstrap(info);
+    await runtimeControls.load();
     await cockpit.load();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

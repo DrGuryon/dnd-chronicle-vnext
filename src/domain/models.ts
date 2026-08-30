@@ -99,6 +99,7 @@ export interface KnowledgeRecord {
   toEventId: string | null;
   confidence: number | null;
   source: string | null;
+  visibilityScope: 'world' | 'public' | 'observer';
 }
 
 export type ItemPlacement =
@@ -229,5 +230,6 @@ export interface CreateKnowledgeInput {
   toEventId?: string | null;
   confidence?: number | null;
   source?: string | null;
+  visibilityScope?: 'world' | 'public' | 'observer';
 }
 

@@ -37,11 +37,12 @@ export class ChronicleReadModelService {
     private readonly domain: ChronicleDomainService,
     private readonly characters: CharacterDomainService,
     private readonly preferences: UiPreferencesService,
+    private readonly activeCharacterId: () => string | null = () => null,
   ) {}
 
   getInitialCockpit(): CharacterCockpitView | null {
-    const character = this.domain.listCharacters()[0];
-    return character ? this.getCharacterCockpit(character.id) : null;
+    const characterId = this.activeCharacterId();
+    return characterId ? this.getCharacterCockpit(characterId) : null;
   }
 
   getCharacterCockpit(characterId: string): CharacterCockpitView {

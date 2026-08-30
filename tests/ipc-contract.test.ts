@@ -22,6 +22,7 @@ describe('Milestone 4 typed IPC command layer', () => {
     const fixture = seedArqos(database);
     const ipc = new ChronicleIpcService(database);
 
+    database.engine.setActivePlayerCharacter(fixture.campaignId, fixture.characterId);
     expect(ipc.getCharacterCockpit()).toMatchObject({ characterId: fixture.characterId });
     expect(ipc.changeHitPoints({ characterId: fixture.characterId, amount: -7 }).combat.hp.current)
       .toBe(45);
@@ -141,6 +142,33 @@ describe('Milestone 4 typed IPC command layer', () => {
       collapsedSections: ['not-a-section'],
       panelWidth: 470,
     })).toThrow('nepodporovanou sekci');
+    database.close();
+  });
+
+  it('exposes validated runtime and conversation controls without SQL', async () => {
+    const database = await openTemporaryDatabase();
+    const fixture = seedArqos(database);
+    const ipc = new ChronicleIpcService(database);
+    expect(ipc.getRuntimeWorkspace()).toMatchObject({
+      campaigns: [{ id: fixture.campaignId, runtime: { activePlayerCharacterId: null } }],
+    });
+    expect(ipc.setActivePlayerCharacter({
+      campaignId: fixture.campaignId,
+      entityId: fixture.characterId,
+    }).activePlayerCharacterId).toBe(fixture.characterId);
+    const conversation = ipc.createConversation({
+      campaignId: fixture.campaignId,
+      title: 'První scéna',
+    });
+    expect(ipc.setActiveConversation({
+      campaignId: fixture.campaignId,
+      entityId: conversation.id,
+    }).activeConversationId).toBe(conversation.id);
+    expect(ipc.getSceneContext(fixture.campaignId)).toMatchObject({
+      activePlayerCharacter: { id: fixture.characterId },
+      conversationId: conversation.id,
+    });
+    expect(ipc.getChronicleToolCatalog().every((tool) => tool.mutatesState === false)).toBe(true);
     database.close();
   });
 });

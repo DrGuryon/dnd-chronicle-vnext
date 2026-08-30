@@ -1,4 +1,4 @@
-# Architecture — Character Cockpit and Entity Cards
+# Architecture — Chronicle Engine, Character Cockpit and Entity Cards
 
 ## Hranice procesu
 
@@ -14,7 +14,18 @@ SQLite je lokální source of truth. Soubor je v `app.getPath('userData')/data/c
 
 Schéma používá monotónní `PRAGMA user_version` a auditní tabulku `schema_migrations`. Migrace běží v `BEGIN IMMEDIATE` transakci. Aplikace odmítne otevřít databázi s novějším schématem, aby downgrade nepoškodil data. Před každým skutečným upgradem existující databáze vytvoří SQLite backup do `userData/backups`.
 
-Schéma v3 rozšířilo storage a Milestone 2 domain foundation o praktický Character model. Schéma v4 přidává pouze `character_panel_preferences`: pořadí a sbalení sekcí a šířku panelu per Campaign + Character. Pravidlová ani odvozená data se do UI preferences neduplikují. Databáze v1, v2 i v3 postupují stejným monotónním migration runnerem do v4 a před upgradem vždy vznikne konzistentní backup.
+Schéma v3 rozšířilo storage a Milestone 2 domain foundation o praktický Character model. Schéma v4 přidalo izolované `character_panel_preferences`. Schéma v5 přidává Campaign Runtime State, Conversations/Messages, Scene participants, explicitní Event/Message entity references, Knowledge visibility scope, Turn Transactions, technický tool log a reprodukovatelný FTS5 index. Databáze v1–v4 postupují stejným monotónním migration runnerem do v5 a před upgradem vždy vznikne konzistentní backup.
+
+## Chronicle Engine boundary
+
+`ChronicleEngineService` je deterministická vrstva mezi source-of-truth doménou a budoucím modelem. Sestavuje malý Hot `SceneContextView`, provádí explicitní bounded Warm/Cold dotazy a publikuje serializovatelný Chronicle Tool Catalog. Nepřijímá SQL, názvy tabulek, obecné property paths ani arbitrary patch. `ChronicleOrchestrator` pouze koordinuje context, tool calls, validaci a commit; negeneruje příběh a nevolá síť.
+
+```text
+Player input → SceneContext → Chronicle tools → ProposedTurnTransaction
+             → deterministic validation → approval policy → atomic commit
+```
+
+Aktivní Character, Conversation a Scene Location jsou explicitní v `campaign_runtime_state`. Pokud Scene Location není nastavená, jediný definovaný fallback je `activePlayerCharacter.currentLocationId`. Character Cockpit již nikdy nevybírá první vytvořenou postavu.
 
 ## Read model a IPC hranice
 
@@ -112,11 +123,11 @@ Při každém kroku udržuje množinu navštívených item ID. Cyklus tedy odmí
 
 `item_current_placements` slouží pro rychlé čtení. `item_placement_history` uchovává intervaly vymezené Eventy; převod předmětu atomicky uzavře předchozí řádek, otevře nový, změní current state a vloží Event. Lze tak doložit, že meč nejprve ležel v uličce a od konkrétního Eventu ho nese Arqos.
 
-`knowledge_records` odděluje subject od observera. `observer_entity_id = NULL` je připravené pro world truth, konkrétní observer pro znalost postavy. Záznam může nést textovou hodnotu nebo referenci, časový interval, confidence a source. Retrieval ani obecný Knowledge engine zatím nejsou součástí aplikace.
+`knowledge_records` odděluje subject od observera a explicitní `visibility_scope` rozlišuje `world`, `public` a `observer`. World dotaz vrací world truth + public knowledge. Observer dotaz vrací pouze public knowledge a záznamy daného observera; world secret ani vzpomínky jiné postavy do něj neprojdou. Záznam může nést textovou hodnotu nebo referenci, časový interval, confidence a source.
 
 ## Proč renderer nezapisuje SQL
 
-UI nesmí skládat SQL ani měnit několik tabulek postupně. Preload příkazy volají `ChronicleIpcService`, která je směruje do `CharacterDomainService`; ta vynutí invarianty a transakční hranici. Stejný tvar je připravený pro budoucí `TurnTransaction`: jeden příběhový krok může vytvořit Event a několik změn stavu buď celý, nebo vůbec.
+UI nesmí skládat SQL ani měnit několik tabulek postupně. Preload příkazy volají explicitní služby. `TurnTransactionService` před prvním zápisem ověří všechny reference a current-state invarianty, uvnitř jediného `BEGIN IMMEDIATE` je zkontroluje znovu a potom zapíše jeden Event, všechny změny, state history, reference a auditní transaction row. Chyba rollbackne celý příběhový krok.
 
 ## Update pipeline
 
@@ -128,4 +139,4 @@ Produkční vydání musí být Authenticode podepsané. Build konfigurace zapne
 
 ## Hranice tohoto milestone
 
-Milestone poskytuje funkční kompaktní Character Cockpit, společnou Entity Card infrastrukturu, typované query/command API a per-character UI preferences. Není to kompletní Character editor, inventory manager ani plný SRD katalog. Neobsahuje AI retrieval/tool calling, OpenAI orchestration, lokální LLM ani plný combat engine. Tyto vrstvy mají stavět na stabilní identitě, Definition referencích, Eventech a transakčních službách.
+Milestone poskytuje provider-neutral Chronicle Engine a deterministický test harness, ne skutečný model. Neobsahuje OpenAI SDK/API, lokální LLM, embeddings, vector database, prompt editor, NLP entity extraction ani automatické schvalování každého validního návrhu. Podrobný katalog a transakční kontrakty jsou v [`chronicle-engine.md`](chronicle-engine.md).

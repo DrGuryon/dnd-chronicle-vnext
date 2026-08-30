@@ -10,6 +10,15 @@ import type {
   DeathSaveCommand,
 } from '../../shared/contracts';
 import type {
+  CampaignRuntimeState,
+  ChronicleToolDescriptor,
+  ChronicleToolTraceEntry,
+  Conversation,
+  RuntimeWorkspaceView,
+  SceneContextView,
+  SceneParticipant,
+} from '../../shared/chronicle-engine';
+import type {
   CharacterCockpitView,
   CharacterPanelPreferencesInput,
   EntityCardRequest,
@@ -206,6 +215,61 @@ export class ChronicleIpcService {
     return this.refresh(input.characterId);
   }
 
+  getRuntimeWorkspace(value?: unknown): RuntimeWorkspaceView {
+    const campaignId = value === undefined || value === null || value === ''
+      ? undefined
+      : domainId(value, 'campaign');
+    return this.database.engine.getRuntimeWorkspace(campaignId);
+  }
+
+  setActivePlayerCharacter(value: unknown): CampaignRuntimeState {
+    const input = runtimeSelection(value, 'char');
+    return this.database.engine.setActivePlayerCharacter(input.campaignId, input.entityId);
+  }
+
+  setActiveConversation(value: unknown): CampaignRuntimeState {
+    const input = runtimeSelection(value, 'conversation');
+    return this.database.engine.setActiveConversation(input.campaignId, input.entityId);
+  }
+
+  setSceneLocation(value: unknown): CampaignRuntimeState {
+    const input = runtimeSelection(value, 'loc');
+    return this.database.engine.setSceneLocation(input.campaignId, input.entityId);
+  }
+
+  setSceneParticipants(value: unknown): SceneParticipant[] {
+    const input = object(value, 'Scene participants command');
+    const campaignId = domainId(input.campaignId, 'campaign');
+    if (!Array.isArray(input.participants)) throw new Error('Participants musí být pole.');
+    return this.database.engine.setSceneParticipants(campaignId, input.participants.map((item) => {
+      const participant = object(item, 'Scene participant');
+      return {
+        entityId: textValue(participant.entityId, 'Entity ID'),
+        participantRole: textValue(participant.participantRole, 'Participant role'),
+      };
+    }));
+  }
+
+  createConversation(value: unknown): Conversation {
+    const input = object(value, 'Create conversation command');
+    const title = input.title === null || input.title === undefined
+      ? null
+      : textValue(input.title, 'Conversation title');
+    return this.database.engine.createConversation(domainId(input.campaignId, 'campaign'), title);
+  }
+
+  getSceneContext(value: unknown): SceneContextView {
+    return this.database.engine.getSceneContext(domainId(value, 'campaign'));
+  }
+
+  getChronicleToolCatalog(): ChronicleToolDescriptor[] {
+    return this.database.engine.listToolDescriptors();
+  }
+
+  getChronicleTrace(): ChronicleToolTraceEntry[] {
+    return this.database.orchestrator.getTrace();
+  }
+
   private refresh(characterId: string): CharacterCockpitView {
     return this.database.readModels.getCharacterCockpit(characterId);
   }
@@ -331,6 +395,19 @@ function preferencesInput(value: unknown): CharacterPanelPreferencesInput {
     sectionOrder: input.sectionOrder.map((item) => textValue(item, 'Section ID')) as CharacterPanelPreferencesInput['sectionOrder'],
     collapsedSections: input.collapsedSections.map((item) => textValue(item, 'Section ID')) as CharacterPanelPreferencesInput['collapsedSections'],
     panelWidth: finiteNumber(input.panelWidth, 'Panel width'),
+  };
+}
+
+function runtimeSelection(
+  value: unknown,
+  prefix: DomainIdPrefix,
+): { campaignId: string; entityId: string | null } {
+  const input = object(value, 'Runtime selection command');
+  return {
+    campaignId: domainId(input.campaignId, 'campaign'),
+    entityId: input.entityId === null || input.entityId === ''
+      ? null
+      : domainId(input.entityId, prefix),
   };
 }
 

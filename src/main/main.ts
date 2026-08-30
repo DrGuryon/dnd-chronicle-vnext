@@ -135,6 +135,15 @@ function registerIpc(): void {
   handle('ui:save-character-panel-preferences', (preferences) => (
     chronicle.saveCharacterPanelPreferences(preferences)
   ));
+  handle('runtime:get-workspace', (campaignId) => chronicle.getRuntimeWorkspace(campaignId));
+  handle('runtime:set-active-character', (command) => chronicle.setActivePlayerCharacter(command));
+  handle('runtime:set-active-conversation', (command) => chronicle.setActiveConversation(command));
+  handle('runtime:set-scene-location', (command) => chronicle.setSceneLocation(command));
+  handle('runtime:set-scene-participants', (command) => chronicle.setSceneParticipants(command));
+  handle('conversation:create', (command) => chronicle.createConversation(command));
+  handle('engine:get-scene-context', (campaignId) => chronicle.getSceneContext(campaignId));
+  handle('engine:get-tool-catalog', () => chronicle.getChronicleToolCatalog());
+  handle('engine:get-trace', () => chronicle.getChronicleTrace());
   ipcMain.handle('updater:get-state', () => updateController?.getState());
   ipcMain.handle('updater:check', () => updateController?.check());
   ipcMain.handle('updater:install', () => updateController?.install());

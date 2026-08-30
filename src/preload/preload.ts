@@ -71,6 +71,40 @@ const api: ChronicleApi = {
     'ui:save-character-panel-preferences',
     preferences,
   ) as ReturnType<ChronicleApi['saveCharacterPanelPreferences']>,
+  getRuntimeWorkspace: (campaignId) => ipcRenderer.invoke(
+    'runtime:get-workspace',
+    campaignId,
+  ) as ReturnType<ChronicleApi['getRuntimeWorkspace']>,
+  setActivePlayerCharacter: (command) => ipcRenderer.invoke(
+    'runtime:set-active-character',
+    command,
+  ) as ReturnType<ChronicleApi['setActivePlayerCharacter']>,
+  setActiveConversation: (command) => ipcRenderer.invoke(
+    'runtime:set-active-conversation',
+    command,
+  ) as ReturnType<ChronicleApi['setActiveConversation']>,
+  setSceneLocation: (command) => ipcRenderer.invoke(
+    'runtime:set-scene-location',
+    command,
+  ) as ReturnType<ChronicleApi['setSceneLocation']>,
+  setSceneParticipants: (command) => ipcRenderer.invoke(
+    'runtime:set-scene-participants',
+    command,
+  ) as ReturnType<ChronicleApi['setSceneParticipants']>,
+  createConversation: (command) => ipcRenderer.invoke(
+    'conversation:create',
+    command,
+  ) as ReturnType<ChronicleApi['createConversation']>,
+  getSceneContext: (campaignId) => ipcRenderer.invoke(
+    'engine:get-scene-context',
+    campaignId,
+  ) as ReturnType<ChronicleApi['getSceneContext']>,
+  getChronicleToolCatalog: () => ipcRenderer.invoke(
+    'engine:get-tool-catalog',
+  ) as ReturnType<ChronicleApi['getChronicleToolCatalog']>,
+  getChronicleTrace: () => ipcRenderer.invoke(
+    'engine:get-trace',
+  ) as ReturnType<ChronicleApi['getChronicleTrace']>,
   getUpdateState: () => ipcRenderer.invoke('updater:get-state') as Promise<UpdateState>,
   checkForUpdates: () => ipcRenderer.invoke('updater:check') as Promise<UpdateState>,
   installUpdate: () => ipcRenderer.invoke('updater:install') as Promise<void>,

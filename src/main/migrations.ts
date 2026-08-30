@@ -537,6 +537,240 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: 'create_chronicle_engine',
+    up(database) {
+      database.exec(`
+        CREATE TABLE conversations (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          title TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX conversations_campaign_updated_idx
+          ON conversations(campaign_id, updated_at DESC);
+
+        CREATE TABLE conversation_messages (
+          id TEXT PRIMARY KEY,
+          conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          sequence INTEGER NOT NULL CHECK (sequence > 0),
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
+          content TEXT NOT NULL CHECK (length(trim(content)) > 0),
+          created_at TEXT NOT NULL,
+          related_event_id TEXT REFERENCES events(id) DEFERRABLE INITIALLY DEFERRED,
+          metadata TEXT,
+          UNIQUE (conversation_id, sequence)
+        ) STRICT;
+
+        CREATE INDEX conversation_messages_campaign_idx
+          ON conversation_messages(campaign_id, created_at DESC);
+        CREATE INDEX conversation_messages_conversation_sequence_idx
+          ON conversation_messages(conversation_id, sequence DESC);
+        CREATE INDEX conversation_messages_related_event_idx
+          ON conversation_messages(related_event_id)
+          WHERE related_event_id IS NOT NULL;
+
+        CREATE TABLE campaign_runtime_state (
+          campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+          active_player_character_id TEXT REFERENCES characters(entity_id),
+          active_conversation_id TEXT REFERENCES conversations(id),
+          active_scene_location_id TEXT REFERENCES locations(entity_id),
+          updated_at TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX campaign_runtime_active_character_idx
+          ON campaign_runtime_state(active_player_character_id)
+          WHERE active_player_character_id IS NOT NULL;
+
+        CREATE TABLE scene_participants (
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+          participant_role TEXT NOT NULL CHECK (length(trim(participant_role)) > 0),
+          added_at TEXT NOT NULL,
+          PRIMARY KEY (campaign_id, entity_id)
+        ) STRICT;
+
+        CREATE INDEX scene_participants_campaign_role_idx
+          ON scene_participants(campaign_id, participant_role, added_at);
+
+        CREATE TABLE event_entity_references (
+          event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (length(trim(role)) > 0),
+          PRIMARY KEY (event_id, entity_id, role)
+        ) STRICT;
+
+        CREATE INDEX event_entity_references_entity_idx
+          ON event_entity_references(entity_id, event_id);
+
+        CREATE TABLE message_entity_references (
+          message_id TEXT NOT NULL REFERENCES conversation_messages(id) ON DELETE CASCADE,
+          entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+          role TEXT NOT NULL DEFAULT 'subject' CHECK (length(trim(role)) > 0),
+          PRIMARY KEY (message_id, entity_id, role)
+        ) STRICT;
+
+        CREATE INDEX message_entity_references_entity_idx
+          ON message_entity_references(entity_id, message_id);
+
+        CREATE TABLE turn_transactions (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          event_id TEXT NOT NULL UNIQUE REFERENCES events(id) ON DELETE RESTRICT,
+          source_conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+          source_message_id TEXT REFERENCES conversation_messages(id) ON DELETE SET NULL,
+          payload_hash TEXT NOT NULL,
+          result_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX turn_transactions_campaign_created_idx
+          ON turn_transactions(campaign_id, created_at DESC);
+
+        CREATE TABLE chronicle_tool_invocations (
+          id INTEGER PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          tool_name TEXT NOT NULL,
+          input_hash TEXT NOT NULL,
+          output_truncated INTEGER NOT NULL DEFAULT 0 CHECK (output_truncated IN (0, 1)),
+          status TEXT NOT NULL CHECK (status IN ('success', 'validation_error', 'failure')),
+          created_at TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX chronicle_tool_invocations_campaign_created_idx
+          ON chronicle_tool_invocations(campaign_id, created_at DESC);
+
+        ALTER TABLE knowledge_records
+          ADD COLUMN visibility_scope TEXT NOT NULL DEFAULT 'world'
+          CHECK (visibility_scope IN ('world', 'public', 'observer'));
+
+        UPDATE knowledge_records
+        SET visibility_scope = 'observer'
+        WHERE observer_entity_id IS NOT NULL;
+
+        ALTER TABLE entities ADD COLUMN normalized_name TEXT NOT NULL DEFAULT '';
+        ALTER TABLE entity_aliases ADD COLUMN normalized_alias TEXT NOT NULL DEFAULT '';
+
+        UPDATE entities SET normalized_name = chronicle_normalize(name);
+        UPDATE entity_aliases SET normalized_alias = chronicle_normalize(alias);
+
+        CREATE TRIGGER entities_normalized_name_insert AFTER INSERT ON entities BEGIN
+          UPDATE entities SET normalized_name = chronicle_normalize(new.name) WHERE id = new.id;
+        END;
+        CREATE TRIGGER entities_normalized_name_update AFTER UPDATE OF name ON entities BEGIN
+          UPDATE entities SET normalized_name = chronicle_normalize(new.name) WHERE id = new.id;
+        END;
+        CREATE TRIGGER entity_aliases_normalized_insert AFTER INSERT ON entity_aliases BEGIN
+          UPDATE entity_aliases SET normalized_alias = chronicle_normalize(new.alias) WHERE id = new.id;
+        END;
+        CREATE TRIGGER entity_aliases_normalized_update AFTER UPDATE OF alias ON entity_aliases BEGIN
+          UPDATE entity_aliases SET normalized_alias = chronicle_normalize(new.alias) WHERE id = new.id;
+        END;
+
+        CREATE INDEX entities_normalized_lookup_idx
+          ON entities(campaign_id, entity_type, normalized_name);
+        CREATE INDEX entity_aliases_normalized_lookup_idx
+          ON entity_aliases(normalized_alias, used_by_entity_id, to_event_id);
+
+        CREATE INDEX knowledge_visibility_lookup_idx
+          ON knowledge_records(
+            campaign_id, subject_entity_id, visibility_scope, observer_entity_id, to_event_id
+          );
+
+        CREATE INDEX entity_aliases_lookup_idx
+          ON entity_aliases(alias COLLATE NOCASE, used_by_entity_id, to_event_id);
+
+        CREATE VIRTUAL TABLE campaign_search_fts USING fts5(
+          kind UNINDEXED,
+          record_id UNINDEXED,
+          campaign_id UNINDEXED,
+          title,
+          body,
+          tokenize = 'unicode61 remove_diacritics 2'
+        );
+
+        CREATE TRIGGER campaign_search_entity_insert AFTER INSERT ON entities BEGIN
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          VALUES ('entity', new.id, new.campaign_id, new.name, new.description);
+        END;
+        CREATE TRIGGER campaign_search_entity_update AFTER UPDATE OF name, description ON entities BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'entity' AND record_id = old.id;
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          VALUES ('entity', new.id, new.campaign_id, new.name, new.description);
+        END;
+        CREATE TRIGGER campaign_search_entity_delete AFTER DELETE ON entities BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'entity' AND record_id = old.id;
+        END;
+
+        CREATE TRIGGER campaign_search_alias_insert AFTER INSERT ON entity_aliases BEGIN
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'entity', new.entity_id, campaign_id, new.alias, new.alias
+          FROM entities WHERE id = new.entity_id;
+        END;
+        CREATE TRIGGER campaign_search_alias_delete AFTER DELETE ON entity_aliases BEGIN
+          DELETE FROM campaign_search_fts
+          WHERE kind = 'entity' AND record_id = old.entity_id AND title = old.alias;
+        END;
+
+        CREATE TRIGGER campaign_search_event_insert AFTER INSERT ON events BEGIN
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          VALUES ('event', new.id, new.campaign_id, new.summary, new.summary);
+        END;
+        CREATE TRIGGER campaign_search_event_delete AFTER DELETE ON events BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'event' AND record_id = old.id;
+        END;
+
+        CREATE TRIGGER campaign_search_message_insert AFTER INSERT ON conversation_messages BEGIN
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          VALUES ('message', new.id, new.campaign_id, new.role, new.content);
+        END;
+        CREATE TRIGGER campaign_search_message_update AFTER UPDATE OF content ON conversation_messages BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'message' AND record_id = old.id;
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          VALUES ('message', new.id, new.campaign_id, new.role, new.content);
+        END;
+        CREATE TRIGGER campaign_search_message_delete AFTER DELETE ON conversation_messages BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'message' AND record_id = old.id;
+        END;
+
+        CREATE TRIGGER campaign_search_knowledge_insert AFTER INSERT ON knowledge_records BEGIN
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          VALUES (
+            'knowledge', new.id, new.campaign_id, new.knowledge_type,
+            coalesce(new.value_text, '') || ' ' || coalesce(new.reference_entity_id, '')
+          );
+        END;
+        CREATE TRIGGER campaign_search_knowledge_update
+        AFTER UPDATE OF knowledge_type, value_text, reference_entity_id ON knowledge_records BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'knowledge' AND record_id = old.id;
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          VALUES (
+            'knowledge', new.id, new.campaign_id, new.knowledge_type,
+            coalesce(new.value_text, '') || ' ' || coalesce(new.reference_entity_id, '')
+          );
+        END;
+        CREATE TRIGGER campaign_search_knowledge_delete AFTER DELETE ON knowledge_records BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'knowledge' AND record_id = old.id;
+        END;
+
+        INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'entity', id, campaign_id, name, description FROM entities;
+        INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'entity', a.entity_id, e.campaign_id, a.alias, a.alias
+          FROM entity_aliases a JOIN entities e ON e.id = a.entity_id;
+        INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'event', id, campaign_id, summary, summary FROM events;
+        INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'knowledge', id, campaign_id, knowledge_type,
+                 coalesce(value_text, '') || ' ' || coalesce(reference_entity_id, '')
+          FROM knowledge_records;
+      `);
+    },
+  },
 ];
 
 export const latestSchemaVersion = migrations.at(-1)?.version ?? 0;

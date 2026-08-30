@@ -182,13 +182,93 @@ h1 span {
   color: #baab99;
 }
 
+.runtime-controls {
+  display: grid;
+  grid-template-columns: auto repeat(3, minmax(130px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 15px 17px;
+  border: 1px solid rgba(211, 187, 151, 0.12);
+  border-radius: 10px;
+  background: rgba(24, 21, 19, 0.88);
+}
+
+.runtime-heading {
+  display: grid;
+  align-self: center;
+  min-width: 125px;
+}
+
+.runtime-heading span,
+.runtime-controls label > span {
+  margin-bottom: 5px;
+  color: #9c4b44;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.runtime-heading strong {
+  color: #dfd2c1;
+  font-family: Georgia, serif;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.runtime-controls label {
+  display: grid;
+}
+
+.runtime-controls select,
+.runtime-controls button {
+  min-height: 35px;
+  border: 1px solid rgba(221, 203, 173, 0.13);
+  border-radius: 7px;
+  background: #171513;
+  color: #c6b9a8;
+  font-size: 11px;
+}
+
+.runtime-controls select {
+  width: 100%;
+  padding: 0 10px;
+}
+
+.runtime-controls button {
+  padding: 0 12px;
+  color: #d1b7a5;
+  cursor: pointer;
+}
+
+.runtime-empty {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  gap: 10px;
+  color: #9b8e7f;
+  font-size: 11px;
+}
+
+.runtime-empty strong {
+  color: #d4c6b5;
+}
+
+.runtime-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #d88478;
+  font-size: 11px;
+}
+
 .hero {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 310px;
   align-items: center;
   min-height: 302px;
-  margin: 42px 0 26px;
+  margin: 24px 0 26px;
   padding: 43px 52px;
   overflow: hidden;
   border: 1px solid rgba(211, 187, 151, 0.13);

@@ -432,6 +432,14 @@ export class ChronicleDomainService {
       ) {
         throw new Error('Confidence musí být číslo od 0 do 1.');
       }
+      const visibilityScope = input.visibilityScope
+        ?? (input.observerEntityId ? 'observer' : 'world');
+      if (visibilityScope === 'observer' && !input.observerEntityId) {
+        throw new Error('Observer knowledge musí mít observerEntityId.');
+      }
+      if (visibilityScope !== 'observer' && input.observerEntityId) {
+        throw new Error('World/public knowledge nesmí mít observerEntityId.');
+      }
       const record: KnowledgeRecord = {
         id: resolveId(input.id, 'knowledge'),
         campaignId: input.campaignId,
@@ -444,6 +452,7 @@ export class ChronicleDomainService {
         toEventId: input.toEventId ?? null,
         confidence: input.confidence ?? null,
         source: input.source ?? null,
+        visibilityScope,
       };
       this.repository.insertKnowledge(record);
       return record;

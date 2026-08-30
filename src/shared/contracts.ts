@@ -63,6 +63,21 @@ export interface DeathSaveCommand {
   success: boolean;
 }
 
+export interface RuntimeSelectionCommand {
+  campaignId: string;
+  entityId: string | null;
+}
+
+export interface SceneParticipantsCommand {
+  campaignId: string;
+  participants: Array<{ entityId: string; participantRole: string }>;
+}
+
+export interface CreateConversationCommand {
+  campaignId: string;
+  title: string | null;
+}
+
 export interface ChronicleApi {
   getBootstrap(): Promise<BootstrapInfo>;
   getCharacterCockpit(characterId?: string): Promise<CharacterCockpitView | null>;
@@ -84,6 +99,15 @@ export interface ChronicleApi {
   saveCharacterPanelPreferences(
     preferences: CharacterPanelPreferencesInput,
   ): Promise<CharacterCockpitView>;
+  getRuntimeWorkspace(campaignId?: string): Promise<RuntimeWorkspaceView>;
+  setActivePlayerCharacter(command: RuntimeSelectionCommand): Promise<CampaignRuntimeState>;
+  setActiveConversation(command: RuntimeSelectionCommand): Promise<CampaignRuntimeState>;
+  setSceneLocation(command: RuntimeSelectionCommand): Promise<CampaignRuntimeState>;
+  setSceneParticipants(command: SceneParticipantsCommand): Promise<SceneParticipant[]>;
+  createConversation(command: CreateConversationCommand): Promise<Conversation>;
+  getSceneContext(campaignId: string): Promise<SceneContextView>;
+  getChronicleToolCatalog(): Promise<ChronicleToolDescriptor[]>;
+  getChronicleTrace(): Promise<ChronicleToolTraceEntry[]>;
   getUpdateState(): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateState>;
   installUpdate(): Promise<void>;
@@ -96,3 +120,12 @@ import type {
   EntityCardView,
   EntitySummary,
 } from './read-models';
+import type {
+  CampaignRuntimeState,
+  ChronicleToolDescriptor,
+  ChronicleToolTraceEntry,
+  Conversation,
+  RuntimeWorkspaceView,
+  SceneContextView,
+  SceneParticipant,
+} from './chronicle-engine';

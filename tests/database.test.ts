@@ -20,7 +20,7 @@ describe('ChronicleDatabase', () => {
     const chronicle = await ChronicleDatabase.open(userData);
 
     expect(chronicle.path).toBe(path.join(userData, 'data', 'chronicle.db'));
-    expect(chronicle.info.schemaVersion).toBe(4);
+    expect(chronicle.info.schemaVersion).toBe(5);
     expect(chronicle.info.campaignCount).toBe(0);
     chronicle.close();
   });
@@ -37,7 +37,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const reopened = await ChronicleDatabase.open(userData);
-    expect(reopened.info.schemaVersion).toBe(4);
+    expect(reopened.info.schemaVersion).toBe(5);
     expect(reopened.info.campaignCount).toBe(1);
     expect(reopened.info.backupCreated).toBeUndefined();
     reopened.close();
@@ -75,7 +75,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(4);
+    expect(migrated.info.schemaVersion).toBe(5);
     expect(migrated.info.campaignCount).toBe(1);
     expect(migrated.info.backupCreated).toBeDefined();
     expect((await stat(migrated.info.backupCreated!)).size).toBeGreaterThan(0);
@@ -117,7 +117,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(4);
+    expect(migrated.info.schemaVersion).toBe(5);
     expect(migrated.info.backupCreated).toBeDefined();
     expect(migrated.domain.getCampaign('campaign-v2')?.name).toBe('Version two');
     expect(migrated.characters.listDefinitions()).toEqual([]);
@@ -157,7 +157,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(4);
+    expect(migrated.info.schemaVersion).toBe(5);
     expect(migrated.info.backupCreated).toBeDefined();
     migrated.close();
 
@@ -173,6 +173,57 @@ describe('ChronicleDatabase', () => {
       'campaign_id', 'character_id', 'section_order', 'collapsed_sections',
       'panel_width', 'updated_at',
     ]);
+    inspected.close();
+  });
+
+  it('migrates a version 4 database to the persistent Chronicle Engine schema', async () => {
+    const userData = await createTemporaryDirectory();
+    const dataDirectory = path.join(userData, 'data');
+    await mkdir(dataDirectory, { recursive: true });
+    const databasePath = path.join(dataDirectory, 'chronicle.db');
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      ) STRICT;
+    `);
+    for (const migration of migrations.filter((candidate) => candidate.version <= 4)) {
+      migration.up(database);
+      database.prepare(
+        'INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)',
+      ).run(migration.version, migration.name, '2026-01-01T00:00:00.000Z');
+      database.exec(`PRAGMA user_version = ${migration.version};`);
+    }
+    database.prepare(`
+      INSERT INTO campaigns(id, name, created_at, updated_at, ruleset_id, ruleset_version)
+      VALUES ('campaign-v4', 'Version four', ?, ?, 'dnd5e', '2024')
+    `).run('2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+    database.close();
+
+    const migrated = await ChronicleDatabase.open(userData);
+    expect(migrated.info.schemaVersion).toBe(5);
+    expect(migrated.info.backupCreated).toBeDefined();
+    expect(migrated.engine.getCampaignRuntimeState('campaign-v4')).toMatchObject({
+      campaignId: 'campaign-v4',
+      activePlayerCharacterId: null,
+    });
+    migrated.close();
+
+    const inspected = new DatabaseSync(databasePath);
+    const tables = inspected.prepare(`
+      SELECT name FROM sqlite_master WHERE type IN ('table', 'view')
+    `).all() as unknown as Array<{ name: string }>;
+    expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining([
+      'campaign_runtime_state',
+      'conversations',
+      'conversation_messages',
+      'scene_participants',
+      'event_entity_references',
+      'turn_transactions',
+      'campaign_search_fts',
+    ]));
     inspected.close();
   });
 
