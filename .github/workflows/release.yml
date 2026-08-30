@@ -25,6 +25,18 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Ensure all public release assets are attached
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releaseVersion = $env:GITHUB_REF_NAME.TrimStart('v')
+          $assets = @(
+            Get-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe"
+            Get-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe.blockmap"
+            Get-Item -LiteralPath 'release\latest.yml'
+          )
+          gh release upload $env:GITHUB_REF_NAME @($assets.FullName) --clobber
       - uses: actions/upload-artifact@v6
         with:
           name: dnd-chronicle-vnext-windows
