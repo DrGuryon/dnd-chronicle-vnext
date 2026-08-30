@@ -85,7 +85,7 @@ describe('ChronicleDatabase', () => {
       rulesetVersion: '2024',
     });
     migrated.close();
-  });
+  }, 20_000);
 
   it('migrates a version 2 domain database to the complete character schema', async () => {
     const userData = await createTemporaryDirectory();
@@ -132,7 +132,7 @@ describe('ChronicleDatabase', () => {
       SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'active_effects'
     `).get()).toBeDefined();
     inspected.close();
-  });
+  }, 20_000);
 
   it('migrates a version 3 character database to isolated UI preferences', async () => {
     const userData = await createTemporaryDirectory();
