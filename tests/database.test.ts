@@ -85,7 +85,7 @@ describe('ChronicleDatabase', () => {
       rulesetVersion: '2024',
     });
     migrated.close();
-  }, 20_000);
+  });
 
   it('migrates a version 2 domain database to the complete character schema', async () => {
     const userData = await createTemporaryDirectory();
@@ -132,7 +132,7 @@ describe('ChronicleDatabase', () => {
       SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'active_effects'
     `).get()).toBeDefined();
     inspected.close();
-  }, 20_000);
+  });
 
   it('migrates a version 3 character database to isolated UI preferences', async () => {
     const userData = await createTemporaryDirectory();
@@ -174,7 +174,7 @@ describe('ChronicleDatabase', () => {
       'panel_width', 'updated_at',
     ]);
     inspected.close();
-  }, 20_000);
+  });
 
   it('migrates a version 4 database to the persistent Chronicle Engine schema', async () => {
     const userData = await createTemporaryDirectory();
@@ -225,7 +225,7 @@ describe('ChronicleDatabase', () => {
       'campaign_search_fts',
     ]));
     inspected.close();
-  }, 20_000);
+  });
 
   it('rejects a database created by a newer application', async () => {
     const userData = await createTemporaryDirectory();
