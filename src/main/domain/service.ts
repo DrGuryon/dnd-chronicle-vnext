@@ -24,6 +24,7 @@ import type {
   Location,
   MoveCharacterInput,
   TransferItemInput,
+  UpdateCharacterBasicsInput,
 } from '../../domain/models';
 import { SqliteChronicleRepository } from './repository';
 
@@ -48,6 +49,26 @@ export class ChronicleDomainService {
 
   getCampaign(id: string): Campaign | undefined {
     return this.repository.getCampaign(id);
+  }
+
+  listCampaigns(): Campaign[] {
+    return this.repository.listCampaigns();
+  }
+
+  renameCampaign(id: string, nameValue: string): Campaign {
+    return this.repository.transaction(() => {
+      this.requireCampaign(id);
+      this.repository.renameCampaign(id, requiredText(nameValue, 'Název kampaně'), timestamp());
+      return this.requireCampaign(id);
+    });
+  }
+
+  archiveCampaign(id: string): Campaign {
+    return this.repository.transaction(() => {
+      const campaign = this.requireCampaign(id);
+      this.repository.archiveCampaign(id, timestamp());
+      return campaign;
+    });
   }
 
   createLocation(input: CreateLocationInput): Location {
@@ -142,6 +163,16 @@ export class ChronicleDomainService {
 
   getCharacter(id: string): Character | undefined {
     return this.repository.getCharacter(id);
+  }
+
+  updateCharacterBasics(input: UpdateCharacterBasicsInput): Character {
+    return this.repository.transaction(() => {
+      this.requireCharacter(input.characterId);
+      const name = requiredText(input.name, 'Jméno postavy');
+      const fullName = input.fullName?.trim() || null;
+      this.repository.updateCharacterBasics(input.characterId, name, fullName, timestamp());
+      return this.requireCharacter(input.characterId);
+    });
   }
 
   listCharacters(campaignId?: string): Character[] {

@@ -3,6 +3,25 @@ import type { BootstrapInfo, ChronicleApi, UpdateState } from '../shared/contrac
 
 const api: ChronicleApi = {
   getBootstrap: () => ipcRenderer.invoke('app:get-bootstrap') as Promise<BootstrapInfo>,
+  listCampaigns: () => ipcRenderer.invoke('campaign:list') as ReturnType<ChronicleApi['listCampaigns']>,
+  createCampaign: (command) => ipcRenderer.invoke(
+    'campaign:create', command,
+  ) as ReturnType<ChronicleApi['createCampaign']>,
+  renameCampaign: (command) => ipcRenderer.invoke(
+    'campaign:rename', command,
+  ) as ReturnType<ChronicleApi['renameCampaign']>,
+  archiveCampaign: (campaignId) => ipcRenderer.invoke(
+    'campaign:archive', campaignId,
+  ) as ReturnType<ChronicleApi['archiveCampaign']>,
+  listCampaignCharacters: (campaignId) => ipcRenderer.invoke(
+    'character:list', campaignId,
+  ) as ReturnType<ChronicleApi['listCampaignCharacters']>,
+  createCharacter: (command) => ipcRenderer.invoke(
+    'character:create', command,
+  ) as ReturnType<ChronicleApi['createCharacter']>,
+  updateCharacterBasics: (command) => ipcRenderer.invoke(
+    'character:update-basics', command,
+  ) as ReturnType<ChronicleApi['updateCharacterBasics']>,
   getCharacterCockpit: (characterId) => ipcRenderer.invoke(
     'character:get-cockpit',
     characterId,
@@ -95,9 +114,18 @@ const api: ChronicleApi = {
     'conversation:create',
     command,
   ) as ReturnType<ChronicleApi['createConversation']>,
+  listConversations: (campaignId) => ipcRenderer.invoke(
+    'conversation:list', campaignId,
+  ) as ReturnType<ChronicleApi['listConversations']>,
+  renameConversation: (command) => ipcRenderer.invoke(
+    'conversation:rename', command,
+  ) as ReturnType<ChronicleApi['renameConversation']>,
   getConversationMessages: (conversationId) => ipcRenderer.invoke(
     'conversation:list-messages', conversationId,
   ) as ReturnType<ChronicleApi['getConversationMessages']>,
+  getCampaignLibrary: (campaignId) => ipcRenderer.invoke(
+    'library:get-campaign', campaignId,
+  ) as ReturnType<ChronicleApi['getCampaignLibrary']>,
   getAiSettings: (campaignId) => ipcRenderer.invoke('ai:get-settings', campaignId) as ReturnType<ChronicleApi['getAiSettings']>,
   saveAiSettings: (command) => ipcRenderer.invoke('ai:save-settings', command) as ReturnType<ChronicleApi['saveAiSettings']>,
   getAiSecretStatus: () => ipcRenderer.invoke('ai:get-secret-status') as ReturnType<ChronicleApi['getAiSecretStatus']>,

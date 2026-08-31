@@ -16,13 +16,32 @@ export interface CampaignRuntimeState {
 export interface RuntimeWorkspaceCampaign {
   id: string;
   name: string;
+  rulesetId: string;
+  rulesetVersion: string;
+  createdAt: string;
+  updatedAt: string;
   runtime: CampaignRuntimeState;
   characters: EntitySummary[];
   conversations: Conversation[];
+  activePlayerCharacter: EntitySummary | null;
+  conversationCount: number;
 }
 
 export interface RuntimeWorkspaceView {
   campaigns: RuntimeWorkspaceCampaign[];
+}
+
+export type LibraryCategoryId = 'characters' | 'creatures' | 'items' | 'locations' | 'definitions';
+
+export interface LibraryCategoryView {
+  id: LibraryCategoryId;
+  label: string;
+  items: EntitySummary[];
+}
+
+export interface CampaignLibraryView {
+  campaignId: string;
+  categories: LibraryCategoryView[];
 }
 
 export interface SceneParticipant {

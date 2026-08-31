@@ -80,6 +80,30 @@ export class SqliteChronicleRepository {
     `).get(id) as unknown as Campaign | undefined;
   }
 
+  listCampaigns(): Campaign[] {
+    return this.database.prepare(`
+      SELECT id, name, ruleset_id AS rulesetId, ruleset_version AS rulesetVersion,
+             created_at AS createdAt, updated_at AS updatedAt
+      FROM campaigns
+      WHERE archived_at IS NULL
+      ORDER BY updated_at DESC, id
+    `).all() as unknown as Campaign[];
+  }
+
+  renameCampaign(id: string, name: string, updatedAt: string): void {
+    this.database.prepare(`
+      UPDATE campaigns SET name = ?, updated_at = ?
+      WHERE id = ? AND archived_at IS NULL
+    `).run(name, updatedAt, id);
+  }
+
+  archiveCampaign(id: string, archivedAt: string): void {
+    this.database.prepare(`
+      UPDATE campaigns SET archived_at = ?, updated_at = ?
+      WHERE id = ? AND archived_at IS NULL
+    `).run(archivedAt, archivedAt, id);
+  }
+
   insertLocation(location: Location): void {
     this.insertEntity(location);
     this.database.prepare(`
@@ -137,6 +161,18 @@ export class SqliteChronicleRepository {
       JOIN characters c ON c.entity_id = e.id
       WHERE e.id = ?
     `).get(id) as unknown as Character | undefined;
+  }
+
+  updateCharacterBasics(
+    id: string,
+    name: string,
+    fullName: string | null,
+    updatedAt: string,
+  ): void {
+    this.database.prepare('UPDATE entities SET name = ?, updated_at = ? WHERE id = ?')
+      .run(name, updatedAt, id);
+    this.database.prepare('UPDATE characters SET full_name = ? WHERE entity_id = ?')
+      .run(fullName, id);
   }
 
   listCharacters(campaignId?: string): Character[] {

@@ -95,8 +95,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 860,
-    minWidth: 1024,
-    minHeight: 620,
+    minWidth: 760,
+    minHeight: 560,
     backgroundColor: '#11100f',
     show: false,
     title: 'D&D Chronicle vNext',
@@ -134,6 +134,13 @@ function registerIpc(): void {
   });
   if (!chronicleDatabase) throw new Error('Databáze ještě není připravená.');
   const chronicle = new ChronicleIpcService(chronicleDatabase);
+  handle('campaign:list', () => chronicle.listCampaigns());
+  handle('campaign:create', (command) => chronicle.createCampaign(command));
+  handle('campaign:rename', (command) => chronicle.renameCampaign(command));
+  handle('campaign:archive', (campaignId) => chronicle.archiveCampaign(campaignId));
+  handle('character:list', (campaignId) => chronicle.listCampaignCharacters(campaignId));
+  handle('character:create', (command) => chronicle.createCharacter(command));
+  handle('character:update-basics', (command) => chronicle.updateCharacterBasics(command));
   handle('character:get-cockpit', (characterId) => chronicle.getCharacterCockpit(characterId));
   handle('entity:get-summary', (request) => chronicle.getEntitySummary(request));
   handle('entity:get-card', (request) => chronicle.getEntityCard(request));
@@ -159,7 +166,10 @@ function registerIpc(): void {
   handle('runtime:set-scene-location', (command) => chronicle.setSceneLocation(command));
   handle('runtime:set-scene-participants', (command) => chronicle.setSceneParticipants(command));
   handle('conversation:create', (command) => chronicle.createConversation(command));
+  handle('conversation:list', (campaignId) => chronicle.listConversations(campaignId));
+  handle('conversation:rename', (command) => chronicle.renameConversation(command));
   handle('conversation:list-messages', (conversationId) => chronicle.listConversationMessages(conversationId));
+  handle('library:get-campaign', (campaignId) => chronicle.getCampaignLibrary(campaignId));
   handle('ai:get-settings', (campaignId) => chronicle.getAiSettings(campaignId));
   handle('ai:save-settings', (command) => chronicle.saveAiSettings(command));
   handle('ai:list-pending-proposals', (campaignId) => chronicle.listPendingAiProposals(campaignId));
@@ -170,8 +180,10 @@ function registerIpc(): void {
   });
   ipcMain.handle('ai:remove-api-key', () => aiSecretStore?.removeKey());
   ipcMain.handle('ai:test-connection', (_event, campaignId: unknown) => {
-    if (typeof campaignId !== 'string') throw new Error('Campaign ID musí být text.');
-    return aiTurnService?.testConnection(campaignId);
+    if (campaignId !== undefined && campaignId !== null && typeof campaignId !== 'string') {
+      throw new Error('Campaign ID musí být text.');
+    }
+    return aiTurnService?.testConnection(typeof campaignId === 'string' ? campaignId : undefined);
   });
   ipcMain.handle('ai:start-turn', async (event, request: AiTurnRequest) => {
     if (!aiTurnService) throw new Error('AI služba ještě není připravená.');

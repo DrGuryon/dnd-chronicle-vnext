@@ -8,6 +8,7 @@ export class RuntimeControls {
     private readonly root: HTMLElement,
     private readonly onCharacterChanged: (characterId?: string) => Promise<void>,
     private readonly onWorkspaceChanged: () => Promise<void> = async () => {},
+    private readonly requestConversationTitle: () => Promise<string | null> = async () => null,
   ) {
     root.addEventListener('change', (event) => void this.onChange(event));
     root.addEventListener('click', (event) => void this.onClick(event));
@@ -103,7 +104,7 @@ export class RuntimeControls {
   private async onClick(event: Event): Promise<void> {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-new-conversation]');
     if (!button || !this.campaign) return;
-    const title = window.prompt('Název nové konverzace:', 'Nová scéna');
+    const title = await this.requestConversationTitle();
     if (title === null) return;
     button.disabled = true;
     try {

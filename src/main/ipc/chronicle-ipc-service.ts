@@ -1,5 +1,6 @@
 import { requireDomainId, type DomainIdPrefix } from '../../domain/ids';
-import type { EventDraft } from '../../domain/models';
+import { AbilityIds } from '../../domain/character-models';
+import { LifeStateIds, type Character, type EventDraft } from '../../domain/models';
 import type {
   CharacterAmountCommand,
   CharacterEffectCommand,
@@ -16,6 +17,8 @@ import type {
   Conversation,
   ConversationMessage,
   RuntimeWorkspaceView,
+  RuntimeWorkspaceCampaign,
+  CampaignLibraryView,
   SceneContextView,
   SceneParticipant,
 } from '../../shared/chronicle-engine';
@@ -31,6 +34,129 @@ import type { CampaignAiSettings, CampaignAiSettingsUpdate, PendingTurnProposal 
 
 export class ChronicleIpcService {
   constructor(private readonly database: ChronicleDatabase) {}
+
+  listCampaigns(): RuntimeWorkspaceCampaign[] {
+    return this.database.engine.getRuntimeWorkspace().campaigns;
+  }
+
+  createCampaign(value: unknown): RuntimeWorkspaceCampaign {
+    const input = object(value, 'Create campaign command');
+    const rulesetId = textValue(input.rulesetId, 'Ruleset ID');
+    const rulesetVersion = textValue(input.rulesetVersion, 'Ruleset version');
+    if (rulesetId !== 'dnd5e') throw new Error('M7 podporuje ruleset dnd5e.');
+    if (rulesetVersion !== '2014' && rulesetVersion !== '2024') {
+      throw new Error('Ruleset version musí být 2014 nebo 2024.');
+    }
+    const campaign = this.database.domain.createCampaign({
+      name: boundedText(input.name, 'Název kampaně', 120),
+      rulesetId,
+      rulesetVersion,
+    });
+    this.database.engine.ensureCampaignRuntimeState(campaign.id);
+    return this.database.engine.getRuntimeWorkspace(campaign.id).campaigns[0]!;
+  }
+
+  renameCampaign(value: unknown): RuntimeWorkspaceCampaign {
+    const input = object(value, 'Rename campaign command');
+    const campaignId = domainId(input.campaignId, 'campaign');
+    this.database.domain.renameCampaign(
+      campaignId,
+      boundedText(input.name, 'Název kampaně', 120),
+    );
+    return this.database.engine.getRuntimeWorkspace(campaignId).campaigns[0]!;
+  }
+
+  archiveCampaign(value: unknown): void {
+    this.database.domain.archiveCampaign(domainId(value, 'campaign'));
+  }
+
+  listCampaignCharacters(value: unknown): Character[] {
+    return this.database.domain.listCharacters(domainId(value, 'campaign'));
+  }
+
+  createCharacter(value: unknown): Character {
+    const input = object(value, 'Create character command');
+    const campaignId = domainId(input.campaignId, 'campaign');
+    const campaign = this.database.domain.getCampaign(campaignId);
+    if (!campaign) throw new Error(`Kampaň ${campaignId} neexistuje.`);
+    const name = boundedText(input.name, 'Jméno postavy', 120);
+    const fullName = optionalBoundedText(input.fullName, 'Celé jméno', 160);
+    const level = input.level === undefined || input.level === null ? 1 : finiteNumber(input.level, 'Level');
+    if (!Number.isSafeInteger(level) || level < 1 || level > 20) {
+      throw new Error('Level musí být celé číslo od 1 do 20.');
+    }
+
+    const character = this.database.domain.createCharacter({
+      campaignId,
+      name,
+      fullName,
+      description: '',
+      characterType: 'PC',
+      currentLifeStateId: LifeStateIds.alive,
+    });
+    for (const abilityId of AbilityIds) {
+      this.database.characters.setAbilityScore({
+        characterId: character.id,
+        abilityId,
+        baseScore: 10,
+        permanentModifier: 0,
+        overrideScore: null,
+      });
+    }
+    this.database.characters.setCombatState({
+      characterId: character.id,
+      maximumHp: 10,
+      currentHp: 10,
+      temporaryHp: 0,
+      armorClassBase: 10,
+      armorClassModifier: 0,
+      armorClassOverride: null,
+      initiativeModifier: 0,
+      deathSaveSuccesses: 0,
+      deathSaveFailures: 0,
+      inspiration: false,
+    });
+    this.database.characters.addMovement({
+      characterId: character.id,
+      movementType: 'walk',
+      distance: 30,
+      unit: 'ft',
+      sourceType: 'bootstrap',
+      sourceId: character.id,
+      condition: null,
+    });
+
+    const classDefinition = this.bootstrapDefinition(
+      campaign,
+      'Class',
+      optionalBoundedText(input.className, 'Povolání', 120) ?? 'Neurčené povolání',
+    );
+    this.database.characters.addClass({
+      characterId: character.id,
+      classId: classDefinition.id,
+      subclassId: null,
+      level,
+      acquiredEventId: null,
+    });
+    const species = optionalBoundedText(input.species, 'Druh', 120);
+    const background = optionalBoundedText(input.background, 'Zázemí', 120);
+    this.database.characters.setOrigin(character.id, {
+      speciesId: species ? this.bootstrapDefinition(campaign, 'Species', species).id : null,
+      lineageId: null,
+      backgroundId: background ? this.bootstrapDefinition(campaign, 'Background', background).id : null,
+    });
+    this.database.engine.setActivePlayerCharacter(campaignId, character.id);
+    return this.database.domain.getCharacter(character.id)!;
+  }
+
+  updateCharacterBasics(value: unknown): Character {
+    const input = object(value, 'Update character basics command');
+    return this.database.domain.updateCharacterBasics({
+      characterId: domainId(input.characterId, 'char'),
+      name: boundedText(input.name, 'Jméno postavy', 120),
+      fullName: optionalBoundedText(input.fullName, 'Celé jméno', 160),
+    });
+  }
 
   getCharacterCockpit(characterId?: unknown): CharacterCockpitView | null {
     if (characterId === undefined || characterId === null || characterId === '') {
@@ -257,7 +383,22 @@ export class ChronicleIpcService {
     const title = input.title === null || input.title === undefined
       ? null
       : textValue(input.title, 'Conversation title');
-    return this.database.engine.createConversation(domainId(input.campaignId, 'campaign'), title);
+    const campaignId = domainId(input.campaignId, 'campaign');
+    const conversation = this.database.engine.createConversation(campaignId, title);
+    this.database.engine.setActiveConversation(campaignId, conversation.id);
+    return conversation;
+  }
+
+  listConversations(value: unknown): Conversation[] {
+    return this.database.engine.listConversations(domainId(value, 'campaign'), { maxResults: 100 }).items;
+  }
+
+  renameConversation(value: unknown): Conversation {
+    const input = object(value, 'Rename conversation command');
+    const title = input.title === null || input.title === undefined
+      ? null
+      : boundedText(input.title, 'Název konverzace', 120);
+    return this.database.engine.renameConversation(domainId(input.conversationId, 'conversation'), title);
   }
 
   listConversationMessages(value: unknown): ConversationMessage[] {
@@ -266,6 +407,10 @@ export class ChronicleIpcService {
       maxResults: 100,
       maxCharacters: 100_000,
     }).items.reverse();
+  }
+
+  getCampaignLibrary(value: unknown): CampaignLibraryView {
+    return this.database.engine.getCampaignLibrary(domainId(value, 'campaign'));
   }
 
   getAiSettings(value: unknown): CampaignAiSettings {
@@ -292,6 +437,24 @@ export class ChronicleIpcService {
 
   getChronicleTrace(): ChronicleToolTraceEntry[] {
     return this.database.orchestrator.getTrace();
+  }
+
+  private bootstrapDefinition(
+    campaign: { rulesetId: string; rulesetVersion: string },
+    definitionType: 'Class' | 'Species' | 'Background',
+    name: string,
+  ) {
+    return this.database.characters.createDefinition({
+      definitionType,
+      rulesetId: campaign.rulesetId,
+      rulesetVersion: campaign.rulesetVersion,
+      name,
+      description: '',
+      source: 'Campaign bootstrap',
+      origin: 'user',
+      metadata: { bootstrap: true },
+      homebrew: true,
+    });
   }
 
   private refresh(characterId: string): CharacterCockpitView {
@@ -461,6 +624,19 @@ function textValue(value: unknown, label: string): string {
     throw new Error(`${label} musí být neprázdný text do 200 znaků.`);
   }
   return value;
+}
+
+function boundedText(value: unknown, label: string, maximum: number): string {
+  if (typeof value !== 'string') throw new Error(`${label} musí být text.`);
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`${label} nesmí být prázdný.`);
+  if (normalized.length > maximum) throw new Error(`${label} může mít nejvýše ${maximum} znaků.`);
+  return normalized;
+}
+
+function optionalBoundedText(value: unknown, label: string, maximum: number): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  return boundedText(value, label, maximum);
 }
 
 function finiteNumber(value: unknown, label: string): number {

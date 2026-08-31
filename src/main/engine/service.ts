@@ -11,6 +11,7 @@ import type {
 import type {
   AddConversationMessageInput,
   BoundedResult,
+  CampaignLibraryView,
   CampaignRuntimeState,
   CampaignSearchResult,
   CharacterContextSection,
@@ -108,18 +109,46 @@ export class ChronicleEngineService {
 
   getRuntimeWorkspace(campaignId?: string | null): RuntimeWorkspaceView {
     const campaigns = this.database.prepare(`
-      SELECT id, name FROM campaigns
+      SELECT id, name, ruleset_id AS rulesetId, ruleset_version AS rulesetVersion,
+             created_at AS createdAt, updated_at AS updatedAt
+      FROM campaigns
       WHERE archived_at IS NULL AND (? IS NULL OR id = ?)
       ORDER BY updated_at DESC, id
-    `).all(campaignId ?? null, campaignId ?? null) as unknown as Array<{ id: string; name: string }>;
+    `).all(campaignId ?? null, campaignId ?? null) as unknown as Array<{
+      id: string;
+      name: string;
+      rulesetId: string;
+      rulesetVersion: string;
+      createdAt: string;
+      updatedAt: string;
+    }>;
     return {
-      campaigns: campaigns.map((campaign) => ({
-        ...campaign,
-        runtime: this.getCampaignRuntimeState(campaign.id),
-        characters: this.domain.listCharacters(campaign.id).map((character) => this.entitySummary(character.id)),
-        conversations: this.listConversations(campaign.id, { maxResults: 100 }).items,
-      })),
+      campaigns: campaigns.map((campaign) => {
+        const runtime = this.getCampaignRuntimeState(campaign.id);
+        const characters = this.domain.listCharacters(campaign.id)
+          .map((character) => this.entitySummary(character.id));
+        const conversations = this.listConversations(campaign.id, { maxResults: 100 }).items;
+        return {
+          ...campaign,
+          runtime,
+          characters,
+          conversations,
+          activePlayerCharacter: characters.find((item) => item.id === runtime.activePlayerCharacterId) ?? null,
+          conversationCount: conversations.length,
+        };
+      }),
     };
+  }
+
+  ensureCampaignRuntimeState(campaignId: string): CampaignRuntimeState {
+    this.requireCampaign(campaignId);
+    this.database.prepare(`
+      INSERT OR IGNORE INTO campaign_runtime_state(
+        campaign_id, active_player_character_id, active_conversation_id,
+        active_scene_location_id, updated_at
+      ) VALUES (?, NULL, NULL, NULL, ?)
+    `).run(campaignId, timestamp());
+    return this.getCampaignRuntimeState(campaignId);
   }
 
   getActivePlayerCharacterId(campaignId?: string): string | null {
@@ -229,6 +258,71 @@ export class ChronicleEngineService {
       LIMIT ? OFFSET ?
     `).all(campaignId, limits.maxResults + 1, offset) as unknown as Conversation[];
     return boundRows(rows, limits, offset);
+  }
+
+  renameConversation(id: string, titleValue?: string | null): Conversation {
+    const conversation = this.getConversation(id);
+    if (!conversation) throw new ChronicleEngineError('ENTITY_NOT_FOUND', `Conversation ${id} neexistuje.`);
+    const title = titleValue?.trim() || null;
+    if (title && title.length > 120) {
+      throw new ChronicleEngineError('OUT_OF_BOUNDS', 'Název konverzace může mít nejvýše 120 znaků.');
+    }
+    this.database.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?')
+      .run(title, timestamp(), id);
+    return this.getConversation(id)!;
+  }
+
+  getCampaignLibrary(campaignId: string): CampaignLibraryView {
+    this.requireCampaign(campaignId);
+    const entityRows = this.database.prepare(`
+      SELECT id, entity_type AS entityType, name, description
+      FROM entities WHERE campaign_id = ?
+      ORDER BY name COLLATE NOCASE, id
+    `).all(campaignId) as unknown as Array<{
+      id: string;
+      entityType: EntityType;
+      name: string;
+      description: string;
+    }>;
+    const campaign = this.domain.getCampaign(campaignId)!;
+    const definitions = this.database.prepare(`
+      SELECT id, definition_type AS definitionType, name, description
+      FROM rule_definitions
+      WHERE ruleset_id = ? AND ruleset_version = ?
+      ORDER BY name COLLATE NOCASE, id
+    `).all(campaign.rulesetId, campaign.rulesetVersion) as unknown as Array<{
+      id: string;
+      definitionType: string;
+      name: string;
+      description: string;
+    }>;
+    const itemsFor = (type: EntityType): EntitySummary[] => entityRows
+      .filter((row) => row.entityType === type)
+      .map((row) => ({
+        id: row.id,
+        kind: entityKind(row.entityType),
+        label: row.name,
+        subtitle: row.description || row.entityType,
+      }));
+    return {
+      campaignId,
+      categories: [
+        { id: 'characters', label: 'Postavy', items: itemsFor('Character') },
+        { id: 'creatures', label: 'Tvorové', items: itemsFor('Creature') },
+        { id: 'items', label: 'Předměty', items: itemsFor('Item') },
+        { id: 'locations', label: 'Lokace', items: itemsFor('Location') },
+        {
+          id: 'definitions',
+          label: 'Pravidla a definice',
+          items: definitions.map((row) => ({
+            id: row.id,
+            kind: row.definitionType as EntityCardKind,
+            label: row.name,
+            subtitle: row.description || row.definitionType,
+          })),
+        },
+      ],
+    };
   }
 
   addConversationMessage(input: AddConversationMessageInput): ConversationMessage {

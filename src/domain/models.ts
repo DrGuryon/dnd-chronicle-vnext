@@ -130,6 +130,12 @@ export interface CreateCampaignInput {
   rulesetVersion: string;
 }
 
+export interface UpdateCharacterBasicsInput {
+  characterId: string;
+  name: string;
+  fullName?: string | null;
+}
+
 export interface CreateLocationInput {
   id?: string;
   campaignId: string;

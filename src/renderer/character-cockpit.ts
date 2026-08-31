@@ -27,7 +27,11 @@ const sectionTitles: Record<CharacterPanelSectionId, string> = {
 export class CharacterCockpitController {
   private view: CharacterCockpitView | null = null;
 
-  constructor(private readonly root: HTMLElement) {
+  constructor(
+    private readonly root: HTMLElement,
+    private readonly onViewChanged: (view: CharacterCockpitView | null) => void = () => {},
+    private readonly confirmAction: (title: string, description: string) => Promise<boolean> = async () => true,
+  ) {
     root.addEventListener('click', (event) => void this.onClick(event));
     root.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && (event.target as HTMLElement).matches('[data-hp-delta], [data-temp-hp]')) {
@@ -48,10 +52,24 @@ export class CharacterCockpitController {
     }
   }
 
+  async setPanelWidth(width: number): Promise<void> {
+    if (!this.view) return;
+    const panelWidth = Math.min(720, Math.max(300, Math.round(width)));
+    this.view = await window.chronicle.saveCharacterPanelPreferences({
+      campaignId: this.view.campaignId,
+      characterId: this.view.characterId,
+      sectionOrder: this.view.preferences.sectionOrder,
+      collapsedSections: this.view.preferences.collapsedSections,
+      panelWidth,
+    });
+    this.render();
+  }
+
   private render(): void {
     if (!this.view) {
       this.root.style.removeProperty('--cockpit-width');
       this.root.innerHTML = emptyPanel();
+      this.onViewChanged(null);
       return;
     }
     const previousScroll = this.root.querySelector<HTMLElement>('.cockpit-scroll')?.scrollTop ?? 0;
@@ -152,6 +170,7 @@ export class CharacterCockpitController {
     `;
     const scroll = this.root.querySelector<HTMLElement>('.cockpit-scroll');
     if (scroll) scroll.scrollTop = previousScroll;
+    this.onViewChanged(this.view);
   }
 
   private renderSection(sectionId: CharacterPanelSectionId, index: number): string {
@@ -297,7 +316,10 @@ export class CharacterCockpitController {
       case 'short-rest':
       case 'long-rest': {
         const isLong = button.dataset.command === 'long-rest';
-        if (!window.confirm(`${isLong ? 'Dlouhý' : 'Krátký'} odpočinek obnoví příslušné zdroje. Pokračovat?`)) return;
+        if (!await this.confirmAction(
+          `${isLong ? 'Dlouhý' : 'Krátký'} odpočinek`,
+          `${isLong ? 'Dlouhý' : 'Krátký'} odpočinek obnoví příslušné zdroje postavy.`,
+        )) return;
         await this.command(button, () => isLong
           ? window.chronicle.takeLongRest({ characterId })
           : window.chronicle.takeShortRest({ characterId }));

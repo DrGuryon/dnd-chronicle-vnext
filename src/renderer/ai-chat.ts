@@ -1,99 +1,112 @@
-import type {
-  AiSecretStatus,
-  AiTurnClientEvent,
-  CampaignAiSettings,
-  PendingTurnProposal,
-} from '../shared/ai';
-import type { ConversationMessage } from '../shared/chronicle-engine';
+import type { AiTurnClientEvent, PendingTurnProposal } from '../shared/ai';
+import type { ConversationMessage, RuntimeWorkspaceCampaign } from '../shared/chronicle-engine';
 import { errorMessage, escapeHtml, humanize } from './html';
+
+export interface AiChatActions {
+  openSettings(): void;
+  createCharacter(): void;
+  createConversation(): void;
+}
 
 export class AiChatController {
   private campaignId: string | null = null;
   private conversationId: string | null = null;
+  private activeCharacterId: string | null = null;
+  private keyConfigured = false;
   private messages: ConversationMessage[] = [];
   private proposals: PendingTurnProposal[] = [];
   private runId: string | null = null;
   private draftAssistant = '';
   private toolStatus = '';
   private error = '';
+  private userNearBottom = true;
+  private newMessagesPending = false;
 
   constructor(
     private readonly root: HTMLElement,
-    private readonly settingsDialog: HTMLDialogElement,
+    private readonly actions: AiChatActions,
   ) {
     root.addEventListener('submit', (event) => void this.onSubmit(event));
     root.addEventListener('click', (event) => void this.onClick(event));
-    settingsDialog.addEventListener('click', (event) => void this.onSettingsClick(event));
+    root.addEventListener('scroll', (event) => this.onScroll(event), true);
     window.chronicle.onAiTurnEvent((event) => void this.onTurnEvent(event));
     this.render();
   }
 
-  async load(): Promise<void> {
+  async load(campaign: RuntimeWorkspaceCampaign | null): Promise<void> {
+    const nextCampaignId = campaign?.id ?? null;
+    if (this.runId && nextCampaignId !== this.campaignId) {
+      await window.chronicle.cancelAiTurn(this.runId);
+      this.runId = null;
+    }
+    this.campaignId = nextCampaignId;
+    this.conversationId = campaign?.runtime.activeConversationId ?? null;
+    this.activeCharacterId = campaign?.runtime.activePlayerCharacterId ?? null;
+    this.draftAssistant = '';
+    this.toolStatus = '';
+    this.newMessagesPending = false;
     try {
-      const workspace = await window.chronicle.getRuntimeWorkspace();
-      const campaign = workspace.campaigns[0] ?? null;
-      this.campaignId = campaign?.id ?? null;
-      this.conversationId = campaign?.runtime.activeConversationId ?? null;
-      this.messages = this.conversationId
-        ? await window.chronicle.getConversationMessages(this.conversationId)
-        : [];
-      this.proposals = this.campaignId
-        ? await window.chronicle.getPendingAiProposals(this.campaignId)
-        : [];
+      const [messages, proposals, secret] = await Promise.all([
+        this.conversationId
+          ? window.chronicle.getConversationMessages(this.conversationId)
+          : Promise.resolve([]),
+        this.campaignId
+          ? window.chronicle.getPendingAiProposals(this.campaignId)
+          : Promise.resolve([]),
+        window.chronicle.getAiSecretStatus(),
+      ]);
+      this.messages = messages;
+      this.proposals = proposals;
+      this.keyConfigured = secret.configured;
       this.error = '';
     } catch (error) {
       this.error = errorMessage(error);
     }
+    this.userNearBottom = true;
     this.render();
   }
 
   private render(): void {
-    const previous = this.root.querySelector<HTMLElement>('[data-chat-scroll]');
-    const nearBottom = !previous || previous.scrollHeight - previous.scrollTop - previous.clientHeight < 80;
     const rows = this.messages.map(messageRow);
-    if (this.draftAssistant) rows.push(`
-      <article class="chat-message is-assistant is-streaming">
-        <span>Chronicle</span><div>${renderMarkdown(this.draftAssistant)}</div>
-      </article>
-    `);
-    this.root.innerHTML = `
-      <header class="chat-heading">
-        <div><p>AI VYPRAVĚČ</p><h2>Chronicle Chat</h2></div>
-        <button type="button" data-chat-action="settings" ${this.campaignId ? '' : 'disabled'}>⚙ Nastavení AI</button>
-      </header>
+    if (this.draftAssistant) rows.push(`<article class="chat-message is-assistant is-streaming">
+      <span>Chronicle</span><div>${renderMarkdown(this.draftAssistant)}</div></article>`);
+    const prerequisite = !this.campaignId
+      ? 'campaign'
+      : !this.activeCharacterId
+        ? 'character'
+        : !this.conversationId
+          ? 'conversation'
+          : !this.keyConfigured
+            ? 'key'
+            : null;
+    this.root.innerHTML = `<header class="chat-heading">
+      <div><p>AI VYPRAVĚČ</p><h2>Chronicle Chat</h2></div>
+      <button type="button" data-chat-action="settings">⚙ Nastavení AI</button></header>
       <div class="chat-scroll" data-chat-scroll aria-live="polite">
-        ${rows.length ? rows.join('') : `<div class="chat-empty">
-          <strong>${this.conversationId ? 'Scéna čeká na první zprávu' : 'Vyberte nebo vytvořte konverzaci'}</strong>
-          <p>AI načítá pouze kontext, který pro tah skutečně potřebuje.</p>
-        </div>`}
+        ${rows.length ? rows.join('') : emptyChat(prerequisite)}
       </div>
+      ${this.newMessagesPending ? '<button type="button" class="new-messages" data-chat-action="scroll-bottom">Nové zprávy ↓</button>' : ''}
       ${this.toolStatus ? `<p class="chat-tool-status">${escapeHtml(this.toolStatus)}</p>` : ''}
       ${this.proposals.map(proposalCard).join('')}
       ${this.error ? `<p class="chat-error" role="alert">${escapeHtml(this.error)}</p>` : ''}
+      ${prerequisite ? prerequisiteAction(prerequisite) : ''}
       <form class="chat-composer">
-        <textarea name="message" rows="2" maxlength="20000" placeholder="Co vaše postava udělá?"
-          ${!this.conversationId || this.runId ? 'disabled' : ''}></textarea>
-        ${this.runId
-          ? '<button type="button" data-chat-action="cancel">Zastavit</button>'
-          : `<button type="submit" ${this.conversationId ? '' : 'disabled'}>Odeslat</button>`}
-      </form>
-    `;
-    if (nearBottom) requestAnimationFrame(() => {
-      const scroll = this.root.querySelector<HTMLElement>('[data-chat-scroll]');
-      if (scroll) scroll.scrollTop = scroll.scrollHeight;
-    });
+        <textarea name="message" rows="2" maxlength="20000" placeholder="Co vaše postava udělá?" ${prerequisite || this.runId ? 'disabled' : ''}></textarea>
+        ${this.runId ? '<button type="button" data-chat-action="cancel">Zastavit</button>' : `<button type="submit" ${prerequisite ? 'disabled' : ''}>Odeslat</button>`}
+      </form>`;
+    if (this.userNearBottom) requestAnimationFrame(() => this.scrollToBottom());
   }
 
   private async onSubmit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (!this.campaignId || !this.conversationId || this.runId) return;
+    if (!this.campaignId || !this.conversationId || !this.activeCharacterId || !this.keyConfigured || this.runId) return;
     const form = event.target as HTMLFormElement;
     const textarea = form.elements.namedItem('message') as HTMLTextAreaElement;
     const content = textarea.value.trim();
     if (!content) return;
     this.error = '';
     this.draftAssistant = '';
-    const now = new Date().toISOString();
+    this.userNearBottom = true;
     this.messages.push({
       id: `local_${Date.now()}`,
       campaignId: this.campaignId,
@@ -101,7 +114,7 @@ export class AiChatController {
       sequence: this.messages.length + 1,
       role: 'user',
       content,
-      createdAt: now,
+      createdAt: new Date().toISOString(),
       relatedEventId: null,
       metadata: null,
     });
@@ -118,18 +131,24 @@ export class AiChatController {
     } catch (error) {
       this.error = errorMessage(error);
       this.runId = null;
-      await this.load();
+      await this.reloadCurrent();
     }
   }
 
   private async onClick(event: MouseEvent): Promise<void> {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-chat-action]');
     if (!button) return;
-    if (button.dataset.chatAction === 'settings') {
-      await this.openSettings();
+    const action = button.dataset.chatAction;
+    if (action === 'settings') return this.actions.openSettings();
+    if (action === 'create-character') return this.actions.createCharacter();
+    if (action === 'create-conversation') return this.actions.createConversation();
+    if (action === 'scroll-bottom') {
+      this.userNearBottom = true;
+      this.newMessagesPending = false;
+      this.render();
       return;
     }
-    if (button.dataset.chatAction === 'cancel' && this.runId) {
+    if (action === 'cancel' && this.runId) {
       button.disabled = true;
       await window.chronicle.cancelAiTurn(this.runId);
       return;
@@ -138,9 +157,9 @@ export class AiChatController {
     if (!proposalId) return;
     button.disabled = true;
     try {
-      if (button.dataset.chatAction === 'apply') await window.chronicle.applyAiProposal(proposalId);
-      if (button.dataset.chatAction === 'reject') await window.chronicle.rejectAiProposal(proposalId);
-      await this.load();
+      if (action === 'apply') await window.chronicle.applyAiProposal(proposalId);
+      if (action === 'reject') await window.chronicle.rejectAiProposal(proposalId);
+      await this.reloadCurrent();
     } catch (error) {
       this.error = errorMessage(error);
       this.render();
@@ -150,145 +169,87 @@ export class AiChatController {
   private async onTurnEvent(event: AiTurnClientEvent): Promise<void> {
     if (this.runId && event.runId !== this.runId) return;
     if (event.type === 'started') this.runId = event.runId;
-    if (event.type === 'text-delta') this.draftAssistant += event.delta;
+    if (event.type === 'text-delta') {
+      this.draftAssistant += event.delta;
+      if (!this.userNearBottom) this.newMessagesPending = true;
+    }
     if (event.type === 'tool-status') {
       this.toolStatus = event.status === 'running'
         ? `Načítám: ${humanize(event.name.replace('chronicle.', ''))}…`
         : '';
     }
     if (event.type === 'proposal') {
-      this.proposals = [event.proposal, ...this.proposals.filter((value) => value.id !== event.proposal.id)];
+      this.proposals = [event.proposal, ...this.proposals.filter((item) => item.id !== event.proposal.id)];
     }
     if (event.type === 'failed') {
       this.error = event.message;
       this.runId = null;
       this.draftAssistant = '';
       this.toolStatus = '';
-      await this.load();
+      await this.reloadCurrent();
       return;
     }
     if (event.type === 'cancelled' || event.type === 'completed') {
       this.runId = null;
       this.draftAssistant = '';
       this.toolStatus = '';
-      await this.load();
+      await this.reloadCurrent();
       return;
     }
     this.render();
   }
 
-  private async openSettings(): Promise<void> {
-    if (!this.campaignId) return;
-    this.settingsDialog.innerHTML = '<div class="ai-settings-loading">Načítám nastavení…</div>';
-    this.settingsDialog.showModal();
-    try {
-      const [settings, secret] = await Promise.all([
-        window.chronicle.getAiSettings(this.campaignId),
-        window.chronicle.getAiSecretStatus(),
-      ]);
-      this.renderSettings(settings, secret);
-    } catch (error) {
-      this.settingsDialog.innerHTML = settingsShell(`<p class="chat-error">${escapeHtml(errorMessage(error))}</p>`);
+  private onScroll(event: Event): void {
+    const scroll = (event.target as HTMLElement).closest<HTMLElement>('[data-chat-scroll]');
+    if (!scroll) return;
+    this.userNearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80;
+    if (this.userNearBottom && this.newMessagesPending) {
+      this.newMessagesPending = false;
+      this.root.querySelector('[data-chat-action="scroll-bottom"]')?.remove();
     }
   }
 
-  private renderSettings(settings: CampaignAiSettings, secret: AiSecretStatus, message = ''): void {
-    this.settingsDialog.innerHTML = settingsShell(`
-      <form data-ai-settings-form>
-        <section class="api-key-box">
-          <label>OpenAI API klíč
-            <input type="password" name="apiKey" autocomplete="off" placeholder="sk-…">
-          </label>
-          <p>${secret.configured
-            ? `Klíč je nastaven (${escapeHtml(secret.persistence)}, končí …${escapeHtml(secret.maskedSuffix ?? '')}).`
-            : 'Klíč zatím není nastaven.'}</p>
-          <div><button type="button" data-settings-action="save-key">Uložit klíč</button>
-            <button type="button" data-settings-action="remove-key" ${secret.configured ? '' : 'disabled'}>Odebrat</button>
-            <button type="button" data-settings-action="test">Otestovat připojení</button></div>
-        </section>
-        <label>Model <input name="modelId" value="${escapeHtml(settings.modelId)}" maxlength="120"></label>
-        <div class="settings-grid">
-          ${selectField('reasoningEffort', 'Reasoning', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'], settings.reasoningEffort)}
-          ${selectField('verbosity', 'Podrobnost', ['low', 'medium', 'high'], settings.verbosity)}
-          ${selectField('approvalPolicy', 'Schvalování změn', ['review', 'automatic', 'manual'], settings.approvalPolicy)}
-          <label>Max. výstupních tokenů <input type="number" name="maxOutputTokens" min="256" max="32768" value="${settings.maxOutputTokens}"></label>
-        </div>
-        <label>Pokyny pro kampaň
-          <textarea name="campaignInstructions" rows="5" maxlength="12000">${escapeHtml(settings.campaignInstructions)}</textarea>
-        </label>
-        ${message ? `<p class="settings-message">${escapeHtml(message)}</p>` : ''}
-        <footer><button type="button" data-settings-action="close">Zavřít</button>
-          <button type="button" class="primary-button" data-settings-action="save">Uložit nastavení</button></footer>
-      </form>
-    `);
+  private scrollToBottom(): void {
+    const scroll = this.root.querySelector<HTMLElement>('[data-chat-scroll]');
+    if (scroll) scroll.scrollTop = scroll.scrollHeight;
   }
 
-  private async onSettingsClick(event: MouseEvent): Promise<void> {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-settings-action]');
-    if (!button || !this.campaignId) return;
-    if (button.dataset.settingsAction === 'close') {
-      this.settingsDialog.close();
-      return;
-    }
-    const form = this.settingsDialog.querySelector<HTMLFormElement>('[data-ai-settings-form]');
-    if (!form) return;
-    const data = new FormData(form);
-    button.disabled = true;
-    try {
-      if (button.dataset.settingsAction === 'save-key') {
-        const key = String(data.get('apiKey') ?? '');
-        await window.chronicle.setAiApiKey(key);
-      } else if (button.dataset.settingsAction === 'remove-key') {
-        await window.chronicle.removeAiApiKey();
-      } else if (button.dataset.settingsAction === 'test') {
-        const result = await window.chronicle.testAiConnection(this.campaignId);
-        const [settings, secret] = await Promise.all([
-          window.chronicle.getAiSettings(this.campaignId), window.chronicle.getAiSecretStatus(),
-        ]);
-        this.renderSettings(settings, secret, result.message);
-        return;
-      } else if (button.dataset.settingsAction === 'save') {
-        await window.chronicle.saveAiSettings({
-          campaignId: this.campaignId,
-          settings: {
-            modelId: String(data.get('modelId') ?? ''),
-            reasoningEffort: String(data.get('reasoningEffort')) as CampaignAiSettings['reasoningEffort'],
-            verbosity: String(data.get('verbosity')) as CampaignAiSettings['verbosity'],
-            approvalPolicy: String(data.get('approvalPolicy')) as CampaignAiSettings['approvalPolicy'],
-            maxOutputTokens: Number(data.get('maxOutputTokens')),
-            campaignInstructions: String(data.get('campaignInstructions') ?? ''),
-          },
-        });
-      }
-      const [settings, secret] = await Promise.all([
-        window.chronicle.getAiSettings(this.campaignId), window.chronicle.getAiSecretStatus(),
-      ]);
-      this.renderSettings(settings, secret, 'Uloženo.');
-    } catch (error) {
-      const [settings, secret] = await Promise.all([
-        window.chronicle.getAiSettings(this.campaignId), window.chronicle.getAiSecretStatus(),
-      ]);
-      this.renderSettings(settings, secret, errorMessage(error));
-    }
+  private async reloadCurrent(): Promise<void> {
+    if (!this.campaignId) return this.load(null);
+    const workspace = await window.chronicle.getRuntimeWorkspace(this.campaignId);
+    await this.load(workspace.campaigns[0] ?? null);
   }
+}
+
+function emptyChat(prerequisite: 'campaign' | 'character' | 'conversation' | 'key' | null): string {
+  const copy = {
+    campaign: ['Vytvořte první kampaň', 'Chronicle potřebuje pracovní prostor pro váš příběh.'],
+    character: ['Chybí hráčská postava', 'Vytvořte postavu, aby měl AI vypravěč aktivního hrdinu.'],
+    conversation: ['Nemáte otevřenou scénu', 'Vytvořte konverzaci pro první tah.'],
+    key: ['AI není nakonfigurovaná', 'Zadejte vlastní OpenAI API klíč v globálním nastavení.'],
+  } as const;
+  const value = prerequisite ? copy[prerequisite] : ['Scéna čeká na první zprávu', 'Co vaše postava udělá?'];
+  return `<div class="chat-empty"><strong>${value[0]}</strong><p>${value[1]}</p></div>`;
+}
+
+function prerequisiteAction(value: 'campaign' | 'character' | 'conversation' | 'key'): string {
+  if (value === 'campaign') return '';
+  const action = value === 'character' ? 'create-character' : value === 'conversation' ? 'create-conversation' : 'settings';
+  const label = value === 'character' ? 'Vytvořit postavu' : value === 'conversation' ? 'Nová konverzace' : 'Otevřít Nastavení AI';
+  return `<div class="chat-prerequisite"><span>${value === 'key' ? 'AI není nakonfigurovaná.' : 'Chybí povinný krok.'}</span><button type="button" data-chat-action="${action}">${label}</button></div>`;
 }
 
 function messageRow(message: ConversationMessage): string {
   if (message.role !== 'user' && message.role !== 'assistant') return '';
-  return `<article class="chat-message is-${message.role}">
-    <span>${message.role === 'user' ? 'Vy' : 'Chronicle'}</span>
-    <div>${renderMarkdown(message.content)}</div>
-  </article>`;
+  return `<article class="chat-message is-${message.role}"><span>${message.role === 'user' ? 'Vy' : 'Chronicle'}</span><div>${renderMarkdown(message.content)}</div></article>`;
 }
 
 function proposalCard(proposal: PendingTurnProposal): string {
   if (proposal.status !== 'pending') return '';
-  return `<section class="proposal-card">
-    <header><span>Navržené změny</span><strong>${escapeHtml(proposal.transaction.event.summary)}</strong></header>
+  return `<section class="proposal-card"><header><span>Navržené změny</span><strong>${escapeHtml(proposal.transaction.event.summary)}</strong></header>
     <ul>${proposal.transaction.changes.map((change) => `<li>${escapeHtml(changeSummary(change))}</li>`).join('')}</ul>
     <div><button type="button" data-chat-action="reject" data-proposal-id="${escapeHtml(proposal.id)}">Zamítnout</button>
-      <button type="button" data-chat-action="apply" data-proposal-id="${escapeHtml(proposal.id)}">Použít</button></div>
-  </section>`;
+      <button type="button" data-chat-action="apply" data-proposal-id="${escapeHtml(proposal.id)}">Použít</button></div></section>`;
 }
 
 function changeSummary(change: PendingTurnProposal['transaction']['changes'][number]): string {
@@ -307,15 +268,4 @@ function changeSummary(change: PendingTurnProposal['transaction']['changes'][num
 function renderMarkdown(value: string): string {
   const safe = escapeHtml(value).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   return safe.split(/\n{2,}/).map((paragraph) => `<p>${paragraph.replaceAll('\n', '<br>')}</p>`).join('');
-}
-
-function settingsShell(content: string): string {
-  return `<div class="ai-settings-shell"><header><h2>Nastavení AI</h2>
-    <button type="button" data-settings-action="close" aria-label="Zavřít">×</button></header>${content}</div>`;
-}
-
-function selectField(name: string, label: string, values: string[], selected: string): string {
-  return `<label>${escapeHtml(label)}<select name="${name}">${values.map((value) => (
-    `<option value="${value}"${value === selected ? ' selected' : ''}>${escapeHtml(humanize(value))}</option>`
-  )).join('')}</select></label>`;
 }

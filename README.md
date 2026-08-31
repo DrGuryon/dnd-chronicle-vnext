@@ -1,6 +1,6 @@
 # D&D Chronicle vNext
 
-Windows aplikace s lokální SQLite databází, Chronicle Engine, streamovaným AI vypravěčem přes OpenAI Responses API, interaktivním Character Cockpitem, NSIS instalátorem a integrovaným updaterem.
+Windows aplikace s použitelným campaign workflow, lokální SQLite databází, Chronicle Engine, streamovaným AI vypravěčem přes OpenAI Responses API, interaktivním Character Cockpitem, NSIS instalátorem a integrovaným updaterem.
 
 ## Rychlý start
 
@@ -32,7 +32,7 @@ Přeinstalace ani odinstalace aplikace tento adresář nemaže. Před každou bu
 
 Schéma v6 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Vedle runtime scén, konverzací, observer-aware Knowledge a idempotentních Turn Transactions ukládá bezpečně filtrované vztahové profily, návrhy změn a technický audit AI tahů. V4 preference pravého panelu zůstávají izolované od světa kampaně.
 
-Renderer SQL ani API klíč přímo nepoužívá. Chronicle Engine sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny jednoho tahu. OpenAI adapter používá oficiální SDK a Responses API s `store: false`; běžné testy používají Fake provider a síť nevolají. Podrobnosti jsou v [`docs/architecture.md`](docs/architecture.md), [`docs/chronicle-engine.md`](docs/chronicle-engine.md) a [`docs/ai-runtime.md`](docs/ai-runtime.md).
+Renderer SQL ani API klíč přímo nepoužívá. Chronicle Engine sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny jednoho tahu. OpenAI adapter používá oficiální SDK a Responses API s `store: false`; běžné testy používají Fake provider a síť nevolají. UI shell, první spuštění a technické vrstvy popisují [`docs/ui-shell.md`](docs/ui-shell.md), [`docs/first-run-workflow.md`](docs/first-run-workflow.md), [`docs/architecture.md`](docs/architecture.md), [`docs/chronicle-engine.md`](docs/chronicle-engine.md) a [`docs/ai-runtime.md`](docs/ai-runtime.md).
 
 ## Nastavení AI
 
@@ -54,7 +54,7 @@ Pro produkční distribuci nastavte repozitářové secrets `WIN_CSC_LINK` a `WI
 
 1. Zvyšte `version` v `package.json`.
 2. Commitněte změnu.
-3. Vytvořte odpovídající tag, např. `v0.6.0`.
+3. Vytvořte odpovídající tag, např. `v0.7.0`.
 4. Pushněte tag. GitHub Actions provede testy, build a publikaci.
 
 Nikdy nemíchejte installer a `latest.yml` z různých buildů; updater ověřuje SHA-512 metadata.

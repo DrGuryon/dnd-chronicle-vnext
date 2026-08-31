@@ -168,8 +168,18 @@ export class AiTurnService {
     return true;
   }
 
-  async testConnection(campaignId: string, signal?: AbortSignal): Promise<AiProviderConnectionResult> {
-    const settings = this.database.aiSettings.get(campaignId);
+  async testConnection(campaignId?: string, signal?: AbortSignal): Promise<AiProviderConnectionResult> {
+    const settings: CampaignAiSettings = campaignId ? this.database.aiSettings.get(campaignId) : {
+      campaignId: 'global',
+      provider: 'openai',
+      modelId: 'gpt-5.6-sol',
+      reasoningEffort: 'medium',
+      verbosity: 'medium',
+      maxOutputTokens: 4096,
+      approvalPolicy: 'review',
+      campaignInstructions: '',
+      updatedAt: '',
+    };
     return (await this.resolveProvider(settings)).testConnection(settings.modelId, signal);
   }
 

@@ -78,8 +78,47 @@ export interface CreateConversationCommand {
   title: string | null;
 }
 
+export interface CreateCampaignCommand {
+  name: string;
+  rulesetId: 'dnd5e';
+  rulesetVersion: '2014' | '2024';
+}
+
+export interface RenameCampaignCommand {
+  campaignId: string;
+  name: string;
+}
+
+export interface CreateCharacterCommand {
+  campaignId: string;
+  name: string;
+  fullName?: string | null;
+  species?: string | null;
+  background?: string | null;
+  className?: string | null;
+  level?: number;
+}
+
+export interface UpdateCharacterBasicsCommand {
+  characterId: string;
+  name: string;
+  fullName?: string | null;
+}
+
+export interface RenameConversationCommand {
+  conversationId: string;
+  title: string | null;
+}
+
 export interface ChronicleApi {
   getBootstrap(): Promise<BootstrapInfo>;
+  listCampaigns(): Promise<RuntimeWorkspaceCampaign[]>;
+  createCampaign(command: CreateCampaignCommand): Promise<RuntimeWorkspaceCampaign>;
+  renameCampaign(command: RenameCampaignCommand): Promise<RuntimeWorkspaceCampaign>;
+  archiveCampaign(campaignId: string): Promise<void>;
+  listCampaignCharacters(campaignId: string): Promise<Character[]>;
+  createCharacter(command: CreateCharacterCommand): Promise<Character>;
+  updateCharacterBasics(command: UpdateCharacterBasicsCommand): Promise<Character>;
   getCharacterCockpit(characterId?: string): Promise<CharacterCockpitView | null>;
   getEntitySummary(request: EntityCardRequest): Promise<EntitySummary>;
   getEntityCard(request: EntityCardRequest): Promise<EntityCardView>;
@@ -105,13 +144,16 @@ export interface ChronicleApi {
   setSceneLocation(command: RuntimeSelectionCommand): Promise<CampaignRuntimeState>;
   setSceneParticipants(command: SceneParticipantsCommand): Promise<SceneParticipant[]>;
   createConversation(command: CreateConversationCommand): Promise<Conversation>;
+  listConversations(campaignId: string): Promise<Conversation[]>;
+  renameConversation(command: RenameConversationCommand): Promise<Conversation>;
   getConversationMessages(conversationId: string): Promise<ConversationMessage[]>;
+  getCampaignLibrary(campaignId: string): Promise<CampaignLibraryView>;
   getAiSettings(campaignId: string): Promise<CampaignAiSettings>;
   saveAiSettings(command: { campaignId: string; settings: CampaignAiSettingsUpdate }): Promise<CampaignAiSettings>;
   getAiSecretStatus(): Promise<AiSecretStatus>;
   setAiApiKey(apiKey: string): Promise<AiSecretStatus>;
   removeAiApiKey(): Promise<AiSecretStatus>;
-  testAiConnection(campaignId: string): Promise<AiProviderConnectionResult>;
+  testAiConnection(campaignId?: string): Promise<AiProviderConnectionResult>;
   startAiTurn(request: AiTurnRequest): Promise<{ runId: string }>;
   cancelAiTurn(runId: string): Promise<boolean>;
   getPendingAiProposals(campaignId: string): Promise<PendingTurnProposal[]>;
@@ -138,11 +180,14 @@ import type {
   ChronicleToolDescriptor,
   ChronicleToolTraceEntry,
   Conversation,
+  CampaignLibraryView,
   RuntimeWorkspaceView,
+  RuntimeWorkspaceCampaign,
   SceneContextView,
   SceneParticipant,
   ConversationMessage,
 } from './chronicle-engine';
+import type { Character } from '../domain/models';
 import type {
   AiProposalApplyResult,
   AiProviderConnectionResult,
