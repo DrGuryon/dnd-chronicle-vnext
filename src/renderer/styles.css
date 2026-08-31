@@ -1227,6 +1227,9 @@ button[aria-busy="true"] {
 .chat-empty p { margin: 5px 0 0; font-size: 10px; }
 .chat-tool-status { margin: 0; padding: 0 18px 8px; color: #9c8d7e; font-size: 9px; }
 .chat-error { margin: 0; padding: 9px 18px; color: #dfa099; font-size: 10px; }
+.chat-error p { margin: 0 0 8px; }
+.chat-error div { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-error button { padding: 5px 8px; font-size: 9px; }
 
 .chat-composer {
   display: grid;

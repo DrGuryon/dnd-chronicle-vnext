@@ -17,12 +17,27 @@ import { proposalToolDescriptor } from './tool-schemas';
 
 export type AiProviderResolver = (settings: CampaignAiSettings) => Promise<AiProvider>;
 
+export interface AiRuntimeErrorLog {
+  runId: string;
+  campaignId: string;
+  modelId: string;
+  errorCode: string;
+  timestamp: string;
+  httpStatus?: number;
+  providerCode?: string;
+  providerType?: string;
+  providerMessage?: string;
+  toolName?: string;
+  path?: string;
+}
+
 export class AiTurnService {
   private readonly controllers = new Map<string, AbortController>();
 
   constructor(
     private readonly database: ChronicleDatabase,
     private readonly resolveProvider: AiProviderResolver,
+    private readonly logError: (entry: AiRuntimeErrorLog) => void = () => undefined,
   ) {}
 
   async *runTurn(request: AiTurnRequest): AsyncIterable<AiTurnClientEvent> {
@@ -33,13 +48,15 @@ export class AiTurnService {
     if (conversation.campaignId !== request.campaignId) {
       throw new ChronicleEngineError('CROSS_CAMPAIGN_REFERENCE', 'Konverzace patří do jiné kampaně.');
     }
-    const userMessage = this.database.engine.addConversationMessage({
-      id: createDomainId('message'),
-      campaignId: request.campaignId,
-      conversationId: request.conversationId,
-      role: 'user',
-      content,
-    });
+    const userMessage = request.retryUserMessageId
+      ? this.requireRetryMessage(request.retryUserMessageId, request.campaignId, request.conversationId, content)
+      : this.database.engine.addConversationMessage({
+        id: createDomainId('message'),
+        campaignId: request.campaignId,
+        conversationId: request.conversationId,
+        role: 'user',
+        content,
+      });
     const runId = createDomainId('ai');
     const controller = new AbortController();
     this.controllers.set(runId, controller);
@@ -154,7 +171,8 @@ export class AiTurnService {
           ? error
           : new ChronicleEngineError('AI_TURN_FAILED', error instanceof Error ? error.message : String(error));
         this.database.aiRuns.fail(runId, 'failed', mapped.code);
-        yield { type: 'failed', runId, code: mapped.code, message: mapped.message };
+        this.logError(runtimeErrorLog(runId, request.campaignId, settings.modelId, mapped));
+        yield { type: 'failed', runId, userMessageId: userMessage.id, code: mapped.code, message: mapped.message };
       }
     } finally {
       this.controllers.delete(runId);
@@ -183,6 +201,40 @@ export class AiTurnService {
     return (await this.resolveProvider(settings)).testConnection(settings.modelId, signal);
   }
 
+  async testRuntime(campaignId: string, signal?: AbortSignal): Promise<AiProviderConnectionResult> {
+    const settings = this.database.aiSettings.get(campaignId);
+    const provider = await this.resolveProvider(settings);
+    const scene = this.database.orchestrator.buildTurnContext(campaignId);
+    const diagnosticRunId = createDomainId('ai');
+    let completed = false;
+    try {
+      for await (const event of provider.runTurn({
+        modelId: settings.modelId,
+        reasoningEffort: settings.reasoningEffort,
+        verbosity: settings.verbosity,
+        maxOutputTokens: settings.maxOutputTokens,
+        instructions: `${buildChronicleInstructions(scene, settings)}\n\nDIAGNOSTICKÝ REŽIM: Neměň stav kampaně. Odpověz pouze OK a nevolej nástroje.`,
+        input: [{ role: 'user', content: 'Reply with exactly OK. Do not call tools.' }],
+        tools: [...this.database.engine.listToolDescriptors(), proposalToolDescriptor()],
+        executeTool: async () => ({
+          output: { ok: false, diagnostic: true, message: 'Tool execution is disabled during the runtime test.' },
+          truncated: false,
+        }),
+        signal,
+      })) {
+        if (event.type === 'completed') completed = true;
+      }
+    } catch (error) {
+      const mapped = error instanceof ChronicleEngineError
+        ? error
+        : new ChronicleEngineError('AI_TURN_FAILED', error instanceof Error ? error.message : String(error));
+      this.logError(runtimeErrorLog(diagnosticRunId, campaignId, settings.modelId, mapped));
+      throw mapped;
+    }
+    if (!completed) throw new ChronicleEngineError('OPENAI_STREAM_INCOMPLETE', 'Test AI runtime nedostal dokončenou odpověď.');
+    return { ok: true, modelId: settings.modelId, message: 'AI runtime včetně Chronicle nástrojů funguje.' };
+  }
+
   applyProposal(id: string) {
     const applied = this.database.aiProposals.apply(id);
     this.database.aiRuns.markProposalApplied(applied.proposal.turnRunId);
@@ -193,6 +245,20 @@ export class AiTurnService {
     const proposal = this.database.aiProposals.reject(id);
     this.database.aiRuns.markProposalApplied(proposal.turnRunId);
     return proposal;
+  }
+
+  private requireRetryMessage(
+    id: string,
+    campaignId: string,
+    conversationId: string,
+    content: string,
+  ) {
+    const message = this.database.engine.getConversationMessage(id);
+    if (!message || message.campaignId !== campaignId || message.conversationId !== conversationId
+      || message.role !== 'user' || message.content !== content) {
+      throw new ChronicleEngineError('INVALID_INPUT', 'Původní zprávu pro opakování tahu nelze bezpečně použít.');
+    }
+    return message;
   }
 }
 
@@ -219,4 +285,34 @@ function isTruncated(value: unknown): boolean {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
+}
+
+function runtimeErrorLog(
+  runId: string,
+  campaignId: string,
+  modelId: string,
+  error: ChronicleEngineError,
+): AiRuntimeErrorLog {
+  const detail = error.details;
+  return compact({
+    runId,
+    campaignId,
+    modelId,
+    errorCode: error.code,
+    timestamp: new Date().toISOString(),
+    httpStatus: typeof detail.httpStatus === 'number' ? detail.httpStatus : undefined,
+    providerCode: detailText(detail.providerCode),
+    providerType: detailText(detail.providerType),
+    providerMessage: detailText(detail.providerMessage),
+    toolName: detailText(detail.toolName),
+    path: detailText(detail.path),
+  }) as unknown as AiRuntimeErrorLog;
+}
+
+function detailText(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.slice(0, 500) : undefined;
+}
+
+function compact(value: Record<string, unknown>): Readonly<Record<string, unknown>> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }

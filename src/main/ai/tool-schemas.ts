@@ -1,4 +1,5 @@
 import type { ChronicleToolDescriptor } from '../../shared/chronicle-engine';
+import { ChronicleEngineError } from '../engine/service';
 
 type JsonSchema = Readonly<Record<string, unknown>>;
 
@@ -86,13 +87,20 @@ export function strictToolDescriptor(descriptor: ChronicleToolDescriptor): Chron
   return { ...descriptor, inputSchema: toolSchemas[descriptor.name] ?? descriptor.inputSchema };
 }
 
+export function validateOpenAiStrictToolSchema(
+  toolName: string,
+  schema: Readonly<Record<string, unknown>>,
+): void {
+  validateSchemaNode(toolName, schema, '$', true);
+}
+
 export function proposalToolDescriptor(): ChronicleToolDescriptor {
   return {
     name: 'chronicle.propose_turn_transaction',
     description: 'Validate a proposed atomic world-state transaction. This never commits or mutates campaign state.',
     inputSchema: object({
       event: object({ eventType: string, summary: string, locationId: nullableString }),
-      changes: { type: 'array', maxItems: 24, items: { oneOf: turnChangeSchemas() } },
+      changes: { type: 'array', maxItems: 24, items: { anyOf: turnChangeSchemas() } },
       reasoningSummary: nullableString,
     }),
     mutatesState: false,
@@ -147,7 +155,7 @@ function turnChangeSchemas(): JsonSchema[] {
 }
 
 function placementSchema(): JsonSchema {
-  return { oneOf: [
+  return { anyOf: [
     object({ kind: constant('location'), locationId: string }),
     object({ kind: constant('character'), characterId: string }),
     object({ kind: constant('creature'), creatureId: string }),
@@ -160,4 +168,78 @@ function constant(value: string): JsonSchema { return { type: 'string', const: v
 
 function object(properties: Readonly<Record<string, JsonSchema>>): JsonSchema {
   return { type: 'object', additionalProperties: false, properties, required: Object.keys(properties) };
+}
+
+const unsupportedKeywords = new Set([
+  'oneOf', 'allOf', 'not', 'dependentRequired', 'dependentSchemas', 'if', 'then', 'else',
+  'patternProperties', 'unevaluatedProperties', 'propertyNames', 'contains', 'minContains',
+  'maxContains', 'uniqueItems', 'prefixItems', 'additionalItems', 'minProperties', 'maxProperties',
+  'minLength', 'maxLength', 'contentEncoding', 'contentMediaType', 'default', 'examples',
+]);
+
+function validateSchemaNode(toolName: string, value: unknown, path: string, root: boolean): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    invalidSchema(toolName, path, 'schema musí být objekt');
+  }
+  const node = value as Record<string, unknown>;
+  for (const keyword of Object.keys(node)) {
+    if (unsupportedKeywords.has(keyword)) invalidSchema(toolName, `${path}.${keyword}`, `nepodporované klíčové slovo ${keyword}`);
+  }
+  if (root && ('anyOf' in node || node.type !== 'object')) {
+    invalidSchema(toolName, path, 'kořen strict schema musí být object bez anyOf');
+  }
+
+  const types = Array.isArray(node.type) ? node.type : [node.type];
+  if (types.includes('object')) validateObjectNode(toolName, node, path);
+  if (types.includes('array')) {
+    if (!('items' in node)) invalidSchema(toolName, `${path}.items`, 'array musí definovat items');
+    validateSchemaNode(toolName, node.items, `${path}.items`, false);
+  }
+  if ('anyOf' in node) {
+    if (!Array.isArray(node.anyOf) || node.anyOf.length === 0) {
+      invalidSchema(toolName, `${path}.anyOf`, 'anyOf musí obsahovat alespoň jednu variantu');
+    }
+    node.anyOf.forEach((variant, index) => validateSchemaNode(toolName, variant, `${path}.anyOf[${index}]`, false));
+  }
+  if ('$defs' in node) {
+    if (!node.$defs || typeof node.$defs !== 'object' || Array.isArray(node.$defs)) {
+      invalidSchema(toolName, `${path}.$defs`, '$defs musí být objekt');
+    }
+    for (const [name, definition] of Object.entries(node.$defs as Record<string, unknown>)) {
+      validateSchemaNode(toolName, definition, `${path}.$defs.${name}`, false);
+    }
+  }
+}
+
+function validateObjectNode(toolName: string, node: Record<string, unknown>, path: string): void {
+  if (node.additionalProperties !== false) {
+    invalidSchema(toolName, `${path}.additionalProperties`, 'object musí mít additionalProperties: false');
+  }
+  if (!node.properties || typeof node.properties !== 'object' || Array.isArray(node.properties)) {
+    invalidSchema(toolName, `${path}.properties`, 'object musí definovat properties');
+  }
+  const properties = node.properties as Record<string, unknown>;
+  if (!Array.isArray(node.required)) invalidSchema(toolName, `${path}.required`, 'object musí definovat required');
+  if ((node.required as unknown[]).some((item) => typeof item !== 'string')) {
+    invalidSchema(toolName, `${path}.required`, 'required smí obsahovat pouze názvy vlastností');
+  }
+  const required = new Set(node.required as string[]);
+  if (required.size !== (node.required as string[]).length) {
+    invalidSchema(toolName, `${path}.required`, 'required nesmí obsahovat duplicity');
+  }
+  for (const [name, property] of Object.entries(properties)) {
+    if (!required.has(name)) invalidSchema(toolName, `${path}.required`, `vlastnost ${name} musí být required; volitelnost vyjádřete přes null`);
+    validateSchemaNode(toolName, property, `${path}.properties.${name}`, false);
+  }
+  for (const name of required) {
+    if (!(name in properties)) invalidSchema(toolName, `${path}.required`, `required odkazuje na neexistující vlastnost ${name}`);
+  }
+}
+
+function invalidSchema(toolName: string, path: string, reason: string): never {
+  throw new ChronicleEngineError(
+    'OPENAI_TOOL_SCHEMA_INVALID',
+    `Neplatné schema nástroje ${toolName}: ${reason} (${path}).`,
+    { toolName, path, reason },
+  );
 }

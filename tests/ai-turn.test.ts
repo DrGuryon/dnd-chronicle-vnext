@@ -3,10 +3,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AiTurnService } from '../src/main/ai/turn-service';
+import { AiTurnService, type AiRuntimeErrorLog } from '../src/main/ai/turn-service';
 import { FakeAiProvider } from '../src/main/ai/fake-provider';
 import { ChronicleDatabase } from '../src/main/database';
-import type { AiProviderEvent } from '../src/shared/ai';
+import { ChronicleEngineError } from '../src/main/engine/service';
+import type { AiProviderEvent, AiProviderTurnInput } from '../src/shared/ai';
 import { seedRavenfordM5 } from './fixtures/ravenford-m5';
 
 const temporaryDirectories: string[] = [];
@@ -139,6 +140,103 @@ describe('Milestone 6 AI turn runtime', () => {
     expect(started.value).toMatchObject({ type: 'started' });
     expect(cancelService.cancel(started.value!.runId)).toBe(true);
     expect((await iterator.next()).value).toMatchObject({ type: 'cancelled', runId: started.value!.runId });
+    database.close();
+  });
+
+  it('keeps a failed user message, creates no assistant response, and retries without duplication', async () => {
+    const database = await openDatabase();
+    const fixture = seedRavenfordM5(database);
+    const beforeMessages = database.engine.listConversationMessages(fixture.conversationId, { maxResults: 100 }).items.length;
+    const beforeEvents = database.domain.listEvents(fixture.campaignId).length;
+    const logs: AiRuntimeErrorLog[] = [];
+    const provider = new FakeAiProvider([
+      async () => {
+        throw new ChronicleEngineError(
+          'OPENAI_INVALID_REQUEST',
+          'OpenAI odmítlo požadavek jako neplatný.',
+          { httpStatus: 400, providerCode: 'invalid_function_parameters' },
+        );
+      },
+      [
+        { type: 'text-delta', delta: 'Opakovaný tah uspěl.' },
+        { type: 'completed', responseId: 'retry_response', text: 'Opakovaný tah uspěl.' },
+      ],
+    ]);
+    const service = new AiTurnService(database, async () => provider, (entry) => logs.push(entry));
+
+    const firstEvents = [];
+    for await (const event of service.runTurn({
+      campaignId: fixture.campaignId,
+      conversationId: fixture.conversationId,
+      content: 'Test selhání.',
+    })) firstEvents.push(event);
+    const failed = firstEvents.find((event) => event.type === 'failed');
+    expect(failed).toMatchObject({ type: 'failed', code: 'OPENAI_INVALID_REQUEST' });
+    if (!failed || failed.type !== 'failed') throw new Error('Expected failed event.');
+    const afterFailure = database.engine.listConversationMessages(fixture.conversationId, { maxResults: 100 }).items;
+    expect(afterFailure).toHaveLength(beforeMessages + 1);
+    expect(afterFailure.filter((message) => message.content === 'Test selhání.')).toHaveLength(1);
+    expect(afterFailure.some((message) => message.role === 'assistant' && message.content.includes('Test selhání'))).toBe(false);
+    expect(database.domain.listEvents(fixture.campaignId)).toHaveLength(beforeEvents);
+    expect(logs).toEqual([expect.objectContaining({
+      runId: failed.runId,
+      campaignId: fixture.campaignId,
+      errorCode: 'OPENAI_INVALID_REQUEST',
+      httpStatus: 400,
+      providerCode: 'invalid_function_parameters',
+    })]);
+
+    const retryEvents = [];
+    for await (const event of service.runTurn({
+      campaignId: fixture.campaignId,
+      conversationId: fixture.conversationId,
+      content: 'Test selhání.',
+      retryUserMessageId: failed.userMessageId,
+    })) retryEvents.push(event);
+    expect(retryEvents.at(-1)).toMatchObject({ type: 'completed' });
+    const afterRetry = database.engine.listConversationMessages(fixture.conversationId, { maxResults: 100 }).items;
+    expect(afterRetry).toHaveLength(beforeMessages + 2);
+    expect(afterRetry.filter((message) => message.content === 'Test selhání.')).toHaveLength(1);
+    expect(afterRetry).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'assistant', content: 'Opakovaný tah uspěl.' }),
+    ]));
+    expect(database.domain.listEvents(fixture.campaignId)).toHaveLength(beforeEvents);
+    database.close();
+  });
+
+  it('tests the full streaming runtime configuration without changing campaign state', async () => {
+    const database = await openDatabase();
+    const fixture = seedRavenfordM5(database);
+    const settings = database.aiSettings.get(fixture.campaignId);
+    const beforeMessages = database.engine.listConversationMessages(fixture.conversationId, { maxResults: 100 }).items.length;
+    const beforeEvents = database.domain.listEvents(fixture.campaignId).length;
+    const inspectedInputs: AiProviderTurnInput[] = [];
+    const provider = new FakeAiProvider([async (input) => {
+      inspectedInputs.push(input);
+      return [{ type: 'completed', responseId: 'runtime_test', text: 'OK' }];
+    }]);
+    const service = new AiTurnService(database, async () => provider);
+
+    await expect(service.testRuntime(fixture.campaignId)).resolves.toEqual({
+      ok: true,
+      modelId: settings.modelId,
+      message: 'AI runtime včetně Chronicle nástrojů funguje.',
+    });
+    expect(inspectedInputs).toHaveLength(1);
+    expect(inspectedInputs[0]).toMatchObject({
+      modelId: settings.modelId,
+      reasoningEffort: settings.reasoningEffort,
+      verbosity: settings.verbosity,
+      maxOutputTokens: settings.maxOutputTokens,
+      input: [{ role: 'user', content: 'Reply with exactly OK. Do not call tools.' }],
+    });
+    expect(inspectedInputs[0].tools).toHaveLength(13);
+    expect(inspectedInputs[0].tools.map((tool) => tool.name)).toContain('chronicle.propose_turn_transaction');
+    expect(database.engine.listConversationMessages(fixture.conversationId, { maxResults: 100 }).items).toHaveLength(beforeMessages);
+    expect(database.domain.listEvents(fixture.campaignId)).toHaveLength(beforeEvents);
+    const inspected = new DatabaseSync(database.path);
+    expect((inspected.prepare('SELECT COUNT(*) AS count FROM ai_turn_runs').get() as { count: number }).count).toBe(0);
+    inspected.close();
     database.close();
   });
 });

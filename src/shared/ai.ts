@@ -99,6 +99,7 @@ export interface AiTurnRequest {
   campaignId: string;
   conversationId: string;
   content: string;
+  retryUserMessageId?: string;
 }
 
 export interface AiProposalApplyResult {
@@ -125,5 +126,5 @@ export type AiTurnClientEvent =
   | { type: 'tool-status'; runId: string; name: string; status: 'running' | 'completed' }
   | { type: 'proposal'; runId: string; proposal: PendingTurnProposal }
   | { type: 'completed'; runId: string; assistantMessageId: string; proposal: PendingTurnProposal | null }
-  | { type: 'failed'; runId: string; code: string; message: string }
+  | { type: 'failed'; runId: string; userMessageId: string; code: string; message: string }
   | { type: 'cancelled'; runId: string };

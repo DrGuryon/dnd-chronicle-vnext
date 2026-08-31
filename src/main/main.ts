@@ -42,16 +42,20 @@ app.whenReady().then(async () => {
   try {
     chronicleDatabase = await ChronicleDatabase.open(app.getPath('userData'));
     aiSecretStore = new AiSecretStore(app.getPath('userData'), safeStorage);
-    aiTurnService = new AiTurnService(chronicleDatabase, async () => {
-      const apiKey = await aiSecretStore!.getKey();
-      if (!apiKey) {
-        throw new ChronicleEngineError(
-          'OPENAI_KEY_MISSING',
-          'Nejdřív zadejte OpenAI API klíč v nastavení AI.',
-        );
-      }
-      return new OpenAiProvider(apiKey);
-    });
+    aiTurnService = new AiTurnService(
+      chronicleDatabase,
+      async () => {
+        const apiKey = await aiSecretStore!.getKey();
+        if (!apiKey) {
+          throw new ChronicleEngineError(
+            'OPENAI_KEY_MISSING',
+            'Nejdřív zadejte OpenAI API klíč v nastavení AI.',
+          );
+        }
+        return new OpenAiProvider(apiKey);
+      },
+      (entry) => electronLog.error('[AI runtime]', entry),
+    );
 
     if (process.argv.includes('--smoke-test')) {
       process.stdout.write(`${JSON.stringify(chronicleDatabase.info)}\n`);
@@ -184,6 +188,10 @@ function registerIpc(): void {
       throw new Error('Campaign ID musí být text.');
     }
     return aiTurnService?.testConnection(typeof campaignId === 'string' ? campaignId : undefined);
+  });
+  ipcMain.handle('ai:test-runtime', (_event, campaignId: unknown) => {
+    if (typeof campaignId !== 'string') throw new Error('Campaign ID musí být text.');
+    return aiTurnService?.testRuntime(campaignId);
   });
   ipcMain.handle('ai:start-turn', async (event, request: AiTurnRequest) => {
     if (!aiTurnService) throw new Error('AI služba ještě není připravená.');

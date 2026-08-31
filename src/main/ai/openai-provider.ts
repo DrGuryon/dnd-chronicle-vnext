@@ -16,7 +16,7 @@ import type {
 } from '../../shared/ai';
 import { normalizeAiReasoningEffort } from '../../shared/ai';
 import { ChronicleEngineError } from '../engine/service';
-import { strictToolDescriptor } from './tool-schemas';
+import { strictToolDescriptor, validateOpenAiStrictToolSchema } from './tool-schemas';
 
 const MAX_TOOL_ROUNDS = 8;
 const MAX_TOOL_CALLS = 24;
@@ -46,19 +46,34 @@ export class OpenAiProvider implements AiProvider {
     const usage = emptyUsage();
 
     try {
+      const toolBindings = new Map<string, ChronicleToolBinding>();
+      const tools = input.tools.map(strictToolDescriptor).map((tool) => {
+        validateOpenAiStrictToolSchema(tool.name, tool.inputSchema);
+        const providerName = toOpenAiToolName(tool.name);
+        const collision = toolBindings.get(providerName);
+        if (collision) {
+          throw new ChronicleEngineError(
+            'OPENAI_TOOL_SCHEMA_INVALID',
+            `Názvy nástrojů ${collision.name} a ${tool.name} mají stejný OpenAI alias ${providerName}.`,
+            { toolName: tool.name, providerName },
+          );
+        }
+        toolBindings.set(providerName, { name: tool.name });
+        return {
+          type: 'function' as const,
+          name: providerName,
+          description: tool.description,
+          parameters: tool.inputSchema,
+          strict: true,
+        };
+      });
       while (true) {
         assertNotAborted(input.signal);
         const request = {
           model: input.modelId,
           instructions: input.instructions,
           input: responseInput,
-          tools: input.tools.map(strictToolDescriptor).map((tool) => ({
-            type: 'function' as const,
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema,
-            strict: true,
-          })),
+          tools,
           reasoning: { effort: normalizeAiReasoningEffort(input.modelId, input.reasoningEffort) },
           text: { verbosity: input.verbosity },
           max_output_tokens: input.maxOutputTokens,
@@ -80,11 +95,16 @@ export class OpenAiProvider implements AiProvider {
             completed = event.response;
           } else if (event.type === 'response.failed') {
             throw new ChronicleEngineError(
-              'OPENAI_RESPONSE_FAILED',
-              event.response.error?.message ?? 'OpenAI odpověď selhala.',
+              'OPENAI_STREAM_ERROR',
+              'OpenAI streamování odpovědi selhalo.',
+              providerErrorDetails(event.response.error),
             );
           } else if (event.type === 'error') {
-            throw new ChronicleEngineError('OPENAI_STREAM_ERROR', event.message);
+            throw new ChronicleEngineError(
+              'OPENAI_STREAM_ERROR',
+              'OpenAI streamování odpovědi selhalo.',
+              providerErrorDetails(event),
+            );
           }
         }
         if (!completed) throw new ChronicleEngineError('OPENAI_STREAM_INCOMPLETE', 'OpenAI stream skončil bez dokončené odpovědi.');
@@ -103,9 +123,13 @@ export class OpenAiProvider implements AiProvider {
         }
         const outputs: ResponseInput = [];
         for (const call of calls) {
-          yield { type: 'tool-start', callId: call.call_id, name: call.name };
-          const args = parseArguments(call.arguments, call.name);
-          const result = await input.executeTool({ callId: call.call_id, name: call.name, arguments: args });
+          const binding = toolBindings.get(call.name);
+          if (!binding) {
+            throw new ChronicleEngineError('OPENAI_TOOL_ARGUMENTS', `OpenAI zavolalo neznámý nástroj ${call.name}.`);
+          }
+          yield { type: 'tool-start', callId: call.call_id, name: binding.name };
+          const args = parseArguments(call.arguments, binding.name);
+          const result = await input.executeTool({ callId: call.call_id, name: binding.name, arguments: args });
           outputs.push({
             type: 'function_call_output',
             call_id: call.call_id,
@@ -114,7 +138,7 @@ export class OpenAiProvider implements AiProvider {
           yield {
             type: 'tool-finish',
             callId: call.call_id,
-            name: call.name,
+            name: binding.name,
             outputTruncated: result.truncated,
           };
         }
@@ -141,6 +165,22 @@ export class OpenAiProvider implements AiProvider {
       throw mapOpenAiError(error);
     }
   }
+}
+
+interface ChronicleToolBinding {
+  name: string;
+}
+
+export function toOpenAiToolName(name: string): string {
+  const providerName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  if (!providerName || providerName.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(providerName)) {
+    throw new ChronicleEngineError(
+      'OPENAI_TOOL_SCHEMA_INVALID',
+      `Název nástroje ${name} nelze převést na platný OpenAI function name.`,
+      { toolName: name, providerName },
+    );
+  }
+  return providerName;
 }
 
 function isFunctionCall(item: ResponseOutputItem): item is ResponseFunctionToolCall {
@@ -183,11 +223,46 @@ function mapOpenAiError(error: unknown): Error {
     ? Number((error as { status?: unknown }).status)
     : null;
   if (status === 401 || status === 403) {
-    return new ChronicleEngineError('OPENAI_AUTH', 'OpenAI API klíč je neplatný nebo nemá potřebné oprávnění.');
+    return new ChronicleEngineError('OPENAI_AUTH', 'OpenAI API klíč je neplatný nebo nemá potřebné oprávnění.', providerErrorDetails(error));
   }
-  if (status === 404) return new ChronicleEngineError('OPENAI_MODEL', 'Zvolený OpenAI model není dostupný.');
-  if (status === 429) return new ChronicleEngineError('OPENAI_RATE_LIMIT', 'OpenAI dočasně omezuje požadavky nebo byl vyčerpán dostupný kredit.');
-  if (status !== null && status >= 500) return new ChronicleEngineError('OPENAI_UNAVAILABLE', 'OpenAI je dočasně nedostupné.');
-  const message = error instanceof Error ? error.message : String(error);
-  return new ChronicleEngineError('OPENAI_NETWORK', `Spojení s OpenAI selhalo: ${message}`);
+  if (status === 400) return new ChronicleEngineError('OPENAI_INVALID_REQUEST', 'OpenAI odmítlo požadavek jako neplatný.', providerErrorDetails(error));
+  if (status === 404) return new ChronicleEngineError('OPENAI_MODEL', 'Zvolený OpenAI model není dostupný.', providerErrorDetails(error));
+  if (status === 429) return new ChronicleEngineError('OPENAI_RATE_LIMIT', 'OpenAI dočasně omezuje požadavky nebo byl vyčerpán dostupný kredit.', providerErrorDetails(error));
+  if (status !== null && status >= 500) return new ChronicleEngineError('OPENAI_UNAVAILABLE', 'OpenAI je dočasně nedostupné.', providerErrorDetails(error));
+  return new ChronicleEngineError('OPENAI_NETWORK', 'Spojení s OpenAI selhalo.', providerErrorDetails(error));
+}
+
+function providerErrorDetails(error: unknown): Readonly<Record<string, unknown>> {
+  if (!error || typeof error !== 'object') return { providerMessage: sanitizeProviderMessage(String(error)) };
+  const record = error as Record<string, unknown>;
+  const nested = record.error && typeof record.error === 'object' ? record.error as Record<string, unknown> : {};
+  return compactDetails({
+    httpStatus: finiteNumber(record.status),
+    providerCode: safeDetail(record.code ?? nested.code),
+    providerType: safeDetail(record.type ?? nested.type),
+    providerMessage: sanitizeProviderMessage(record.message ?? nested.message),
+  });
+}
+
+function sanitizeProviderMessage(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return String(value)
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
+    .replace(/authorization\s*:\s*bearer\s+\S+/gi, 'Authorization: [REDACTED]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500) || undefined;
+}
+
+function safeDetail(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.slice(0, 120) : undefined;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function compactDetails(details: Record<string, unknown>): Readonly<Record<string, unknown>> {
+  return Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined));
 }

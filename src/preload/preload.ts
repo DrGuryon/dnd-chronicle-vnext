@@ -132,6 +132,7 @@ const api: ChronicleApi = {
   setAiApiKey: (apiKey) => ipcRenderer.invoke('ai:set-api-key', apiKey) as ReturnType<ChronicleApi['setAiApiKey']>,
   removeAiApiKey: () => ipcRenderer.invoke('ai:remove-api-key') as ReturnType<ChronicleApi['removeAiApiKey']>,
   testAiConnection: (campaignId) => ipcRenderer.invoke('ai:test-connection', campaignId) as ReturnType<ChronicleApi['testAiConnection']>,
+  testAiRuntime: (campaignId) => ipcRenderer.invoke('ai:test-runtime', campaignId) as ReturnType<ChronicleApi['testAiRuntime']>,
   startAiTurn: (request) => ipcRenderer.invoke('ai:start-turn', request) as ReturnType<ChronicleApi['startAiTurn']>,
   cancelAiTurn: (runId) => ipcRenderer.invoke('ai:cancel-turn', runId) as ReturnType<ChronicleApi['cancelAiTurn']>,
   getPendingAiProposals: (campaignId) => ipcRenderer.invoke('ai:list-pending-proposals', campaignId) as ReturnType<ChronicleApi['getPendingAiProposals']>,

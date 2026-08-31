@@ -154,6 +154,7 @@ export interface ChronicleApi {
   setAiApiKey(apiKey: string): Promise<AiSecretStatus>;
   removeAiApiKey(): Promise<AiSecretStatus>;
   testAiConnection(campaignId?: string): Promise<AiProviderConnectionResult>;
+  testAiRuntime(campaignId: string): Promise<AiProviderConnectionResult>;
   startAiTurn(request: AiTurnRequest): Promise<{ runId: string }>;
   cancelAiTurn(runId: string): Promise<boolean>;
   getPendingAiProposals(campaignId: string): Promise<PendingTurnProposal[]>;

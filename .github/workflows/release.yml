@@ -37,7 +37,12 @@ jobs:
 
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $env:GITHUB_REF_NAME --title $env:GITHUB_REF_NAME --generate-notes
+            $notesPath = "release-notes\$env:GITHUB_REF_NAME.md"
+            if (Test-Path -LiteralPath $notesPath) {
+              gh release create $env:GITHUB_REF_NAME --title $env:GITHUB_REF_NAME --notes-file $notesPath
+            } else {
+              gh release create $env:GITHUB_REF_NAME --title $env:GITHUB_REF_NAME --generate-notes
+            }
           }
 
           $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" | ConvertFrom-Json

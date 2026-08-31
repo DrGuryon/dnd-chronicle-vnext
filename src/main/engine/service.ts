@@ -246,6 +246,17 @@ export class ChronicleEngineService {
     `).get(id) as unknown as Conversation | undefined;
   }
 
+  getConversationMessage(id: string): ConversationMessage | undefined {
+    const row = this.database.prepare(`
+      SELECT id, conversation_id AS conversationId, campaign_id AS campaignId,
+             sequence, role, content, created_at AS createdAt,
+             related_event_id AS relatedEventId, metadata
+      FROM conversation_messages
+      WHERE id = ?
+    `).get(id) as unknown as Record<string, unknown> | undefined;
+    return row ? messageFromRow(row) : undefined;
+  }
+
   listConversations(campaignId: string, budget?: ContextBudget): BoundedResult<Conversation> {
     this.requireCampaign(campaignId);
     const limits = contextLimits(budget);

@@ -16,6 +16,10 @@ export class AiChatController {
   private messages: ConversationMessage[] = [];
   private proposals: PendingTurnProposal[] = [];
   private runId: string | null = null;
+  private starting = false;
+  private lastSettledRunId: string | null = null;
+  private activeTurnContent: string | null = null;
+  private retryTurn: { content: string; userMessageId: string } | null = null;
   private draftAssistant = '';
   private toolStatus = '';
   private error = '';
@@ -33,7 +37,10 @@ export class AiChatController {
     this.render();
   }
 
-  async load(campaign: RuntimeWorkspaceCampaign | null): Promise<void> {
+  async load(
+    campaign: RuntimeWorkspaceCampaign | null,
+    options: { preserveError?: boolean } = {},
+  ): Promise<void> {
     const nextCampaignId = campaign?.id ?? null;
     if (this.runId && nextCampaignId !== this.campaignId) {
       await window.chronicle.cancelAiTurn(this.runId);
@@ -58,7 +65,10 @@ export class AiChatController {
       this.messages = messages;
       this.proposals = proposals;
       this.keyConfigured = secret.configured;
-      this.error = '';
+      if (!options.preserveError) {
+        this.error = '';
+        this.retryTurn = null;
+      }
     } catch (error) {
       this.error = errorMessage(error);
     }
@@ -88,51 +98,28 @@ export class AiChatController {
       ${this.newMessagesPending ? '<button type="button" class="new-messages" data-chat-action="scroll-bottom">Nové zprávy ↓</button>' : ''}
       ${this.toolStatus ? `<p class="chat-tool-status">${escapeHtml(this.toolStatus)}</p>` : ''}
       ${this.proposals.map(proposalCard).join('')}
-      ${this.error ? `<p class="chat-error" role="alert">${escapeHtml(this.error)}</p>` : ''}
+      ${this.error ? `<section class="chat-error" role="alert"><p>${escapeHtml(this.error)}</p><div>
+        ${this.retryTurn ? '<button type="button" data-chat-action="retry">Zkusit znovu</button>' : ''}
+        <button type="button" data-chat-action="settings">Nastavení AI</button>
+        <button type="button" data-chat-action="dismiss-error" aria-label="Skrýt chybu">Skrýt</button>
+      </div></section>` : ''}
       ${prerequisite ? prerequisiteAction(prerequisite) : ''}
       <form class="chat-composer">
-        <textarea name="message" rows="2" maxlength="20000" placeholder="Co vaše postava udělá?" ${prerequisite || this.runId ? 'disabled' : ''}></textarea>
-        ${this.runId ? '<button type="button" data-chat-action="cancel">Zastavit</button>' : `<button type="submit" ${prerequisite ? 'disabled' : ''}>Odeslat</button>`}
+        <textarea name="message" rows="2" maxlength="20000" placeholder="Co vaše postava udělá?" ${prerequisite || this.runId || this.starting ? 'disabled' : ''}></textarea>
+        ${this.runId ? '<button type="button" data-chat-action="cancel">Zastavit</button>' : `<button type="submit" ${prerequisite || this.starting ? 'disabled' : ''}>Odeslat</button>`}
       </form>`;
     if (this.userNearBottom) requestAnimationFrame(() => this.scrollToBottom());
   }
 
   private async onSubmit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (!this.campaignId || !this.conversationId || !this.activeCharacterId || !this.keyConfigured || this.runId) return;
+    if (!this.campaignId || !this.conversationId || !this.activeCharacterId || !this.keyConfigured || this.runId || this.starting) return;
     const form = event.target as HTMLFormElement;
     const textarea = form.elements.namedItem('message') as HTMLTextAreaElement;
     const content = textarea.value.trim();
     if (!content) return;
-    this.error = '';
-    this.draftAssistant = '';
-    this.userNearBottom = true;
-    this.messages.push({
-      id: `local_${Date.now()}`,
-      campaignId: this.campaignId,
-      conversationId: this.conversationId,
-      sequence: this.messages.length + 1,
-      role: 'user',
-      content,
-      createdAt: new Date().toISOString(),
-      relatedEventId: null,
-      metadata: null,
-    });
     textarea.value = '';
-    this.render();
-    try {
-      const started = await window.chronicle.startAiTurn({
-        campaignId: this.campaignId,
-        conversationId: this.conversationId,
-        content,
-      });
-      this.runId = started.runId;
-      this.render();
-    } catch (error) {
-      this.error = errorMessage(error);
-      this.runId = null;
-      await this.reloadCurrent();
-    }
+    await this.startTurn(content, null, true);
   }
 
   private async onClick(event: MouseEvent): Promise<void> {
@@ -140,6 +127,17 @@ export class AiChatController {
     if (!button) return;
     const action = button.dataset.chatAction;
     if (action === 'settings') return this.actions.openSettings();
+    if (action === 'dismiss-error') {
+      this.error = '';
+      this.retryTurn = null;
+      this.render();
+      return;
+    }
+    if (action === 'retry' && this.retryTurn) {
+      const retry = this.retryTurn;
+      await this.startTurn(retry.content, retry.userMessageId, false);
+      return;
+    }
     if (action === 'create-character') return this.actions.createCharacter();
     if (action === 'create-conversation') return this.actions.createConversation();
     if (action === 'scroll-bottom') {
@@ -168,9 +166,13 @@ export class AiChatController {
 
   private async onTurnEvent(event: AiTurnClientEvent): Promise<void> {
     if (this.runId && event.runId !== this.runId) return;
-    if (event.type === 'started') this.runId = event.runId;
+    if (event.type === 'started') {
+      this.starting = false;
+      this.runId = event.runId;
+    }
     if (event.type === 'text-delta') {
       this.draftAssistant += event.delta;
+      this.toolStatus = '';
       if (!this.userNearBottom) this.newMessagesPending = true;
     }
     if (event.type === 'tool-status') {
@@ -183,14 +185,24 @@ export class AiChatController {
     }
     if (event.type === 'failed') {
       this.error = event.message;
+      this.retryTurn = this.activeTurnContent
+        ? { content: this.activeTurnContent, userMessageId: event.userMessageId }
+        : null;
       this.runId = null;
+      this.starting = false;
+      this.lastSettledRunId = event.runId;
+      this.activeTurnContent = null;
       this.draftAssistant = '';
       this.toolStatus = '';
-      await this.reloadCurrent();
+      await this.reloadCurrent(true);
       return;
     }
     if (event.type === 'cancelled' || event.type === 'completed') {
       this.runId = null;
+      this.starting = false;
+      this.lastSettledRunId = event.runId;
+      this.activeTurnContent = null;
+      this.retryTurn = null;
       this.draftAssistant = '';
       this.toolStatus = '';
       await this.reloadCurrent();
@@ -214,10 +226,58 @@ export class AiChatController {
     if (scroll) scroll.scrollTop = scroll.scrollHeight;
   }
 
-  private async reloadCurrent(): Promise<void> {
-    if (!this.campaignId) return this.load(null);
+  private async reloadCurrent(preserveError = false): Promise<void> {
+    if (!this.campaignId) return this.load(null, { preserveError });
     const workspace = await window.chronicle.getRuntimeWorkspace(this.campaignId);
-    await this.load(workspace.campaigns[0] ?? null);
+    await this.load(workspace.campaigns[0] ?? null, { preserveError });
+  }
+
+  private async startTurn(
+    content: string,
+    retryUserMessageId: string | null,
+    optimisticMessage: boolean,
+  ): Promise<void> {
+    if (!this.campaignId || !this.conversationId || this.runId || this.starting) return;
+    this.error = '';
+    this.retryTurn = null;
+    this.draftAssistant = '';
+    this.toolStatus = 'Chronicle přemýšlí…';
+    this.activeTurnContent = content;
+    this.starting = true;
+    this.userNearBottom = true;
+    if (optimisticMessage) {
+      this.messages.push({
+        id: `local_${Date.now()}`,
+        campaignId: this.campaignId,
+        conversationId: this.conversationId,
+        sequence: this.messages.length + 1,
+        role: 'user',
+        content,
+        createdAt: new Date().toISOString(),
+        relatedEventId: null,
+        metadata: null,
+      });
+    }
+    this.render();
+    try {
+      const started = await window.chronicle.startAiTurn({
+        campaignId: this.campaignId,
+        conversationId: this.conversationId,
+        content,
+        ...(retryUserMessageId ? { retryUserMessageId } : {}),
+      });
+      this.starting = false;
+      if (this.lastSettledRunId !== started.runId) this.runId = started.runId;
+      this.render();
+    } catch (error) {
+      this.error = errorMessage(error);
+      this.runId = null;
+      this.starting = false;
+      this.activeTurnContent = null;
+      this.draftAssistant = '';
+      this.toolStatus = '';
+      await this.reloadCurrent(true);
+    }
   }
 }
 

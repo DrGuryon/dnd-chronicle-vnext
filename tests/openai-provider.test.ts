@@ -27,10 +27,21 @@ describe('OpenAI Responses adapter', () => {
     })) events.push(event);
 
     expect(requests).toHaveLength(2);
-    expect(requests[0]).toMatchObject({ model: 'gpt-5.6-sol', store: false, stream: true });
-    expect((requests[0].tools as Array<Record<string, unknown>>)[0]).toMatchObject({
-      type: 'function', strict: true, name: 'chronicle.propose_turn_transaction',
+    expect(requests[0]).toMatchObject({
+      model: 'gpt-5.6-sol',
+      instructions: 'test',
+      input: [{ role: 'user', content: 'Sesílám Hex.' }],
+      reasoning: { effort: 'medium' },
+      text: { verbosity: 'medium' },
+      max_output_tokens: 2048,
+      parallel_tool_calls: false,
+      store: false,
+      stream: true,
     });
+    expect((requests[0].tools as Array<Record<string, unknown>>)[0]).toMatchObject({
+      type: 'function', strict: true, name: 'chronicle_propose_turn_transaction',
+    });
+    expect(JSON.stringify(requests[0].tools)).not.toContain('"oneOf"');
     expect(requests[1].input).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
       expect.objectContaining({ type: 'function_call_output', call_id: 'call_1' }),
@@ -48,6 +59,58 @@ describe('OpenAI Responses adapter', () => {
       responses: { create: vi.fn(async () => { throw Object.assign(new Error('bad key'), { status: 401 }); }) },
     });
     await expect(provider.testConnection('gpt-5.6-sol')).rejects.toMatchObject({ code: 'OPENAI_AUTH' });
+  });
+
+  it('maps an OpenAI HTTP 400 to invalid request instead of a network failure', async () => {
+    const provider = new OpenAiProvider({
+      responses: {
+        create: vi.fn(async () => {
+          throw Object.assign(new Error('Invalid schema for function chronicle.test.'), {
+            status: 400,
+            code: 'invalid_function_parameters',
+            type: 'invalid_request_error',
+          });
+        }),
+      },
+    });
+    await expect(provider.testConnection('gpt-5.6-sol')).rejects.toMatchObject({
+      code: 'OPENAI_INVALID_REQUEST',
+      message: 'OpenAI odmítlo požadavek jako neplatný.',
+      details: {
+        httpStatus: 400,
+        providerCode: 'invalid_function_parameters',
+        providerType: 'invalid_request_error',
+      },
+    });
+  });
+
+  it('fails locally before a network request when a strict tool schema is unsupported', async () => {
+    const create = vi.fn();
+    const provider = new OpenAiProvider({ responses: { create } });
+    const consume = async () => {
+      for await (const _event of provider.runTurn({
+        modelId: 'gpt-5.6-sol',
+        reasoningEffort: 'low',
+        verbosity: 'low',
+        maxOutputTokens: 256,
+        instructions: 'test',
+        input: [{ role: 'user', content: 'Test.' }],
+        tools: [{
+          ...proposalToolDescriptor(),
+          name: 'chronicle.invalid',
+          inputSchema: {
+            type: 'object', additionalProperties: false, required: ['value'],
+            properties: { value: { oneOf: [{ type: 'string' }, { type: 'null' }] } },
+          },
+        }],
+        executeTool: vi.fn(),
+      })) {
+        // Drain the provider stream.
+      }
+    };
+
+    await expect(consume()).rejects.toMatchObject({ code: 'OPENAI_TOOL_SCHEMA_INVALID' });
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('tests a connection without sending a model-specific reasoning value', async () => {
@@ -90,7 +153,7 @@ describe('OpenAI Responses adapter', () => {
 
 async function* firstStream() {
   const call = {
-    type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'chronicle.propose_turn_transaction',
+    type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'chronicle_propose_turn_transaction',
     arguments: '{"event":{"eventType":"spell.cast","summary":"Hex."},"changes":[]}', status: 'completed',
   };
   yield { type: 'response.output_item.done', item: call, output_index: 0, sequence_number: 1 };

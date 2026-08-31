@@ -94,6 +94,10 @@ export class AiSettingsController {
       } else if (button.dataset.settingsAction === 'test-connection') {
         const result = await window.chronicle.testAiConnection(this.campaignId ?? undefined);
         this.message = result.message;
+      } else if (button.dataset.settingsAction === 'test-runtime') {
+        if (!this.campaignId) throw new Error('Nejdřív vyberte kampaň.');
+        const result = await window.chronicle.testAiRuntime(this.campaignId);
+        this.message = result.message;
       }
     } catch (error) {
       this.message = errorMessage(error);
@@ -142,7 +146,8 @@ function campaignForm(settings: CampaignAiSettings): string {
       ${selectField('approvalPolicy', 'Schvalování změn', ['review', 'automatic', 'manual'], settings.approvalPolicy)}
       <label>Max. výstupních tokenů<input type="number" name="maxOutputTokens" min="256" max="32768" value="${settings.maxOutputTokens}" required></label>
     </div><label>Pokyny pro kampaň<textarea name="campaignInstructions" rows="6" maxlength="12000">${escapeHtml(settings.campaignInstructions)}</textarea></label>
-    <div class="button-row"><button type="submit" class="primary-button">Uložit nastavení kampaně</button></div></form>`;
+    <div class="button-row"><button type="submit" class="primary-button">Uložit nastavení kampaně</button>
+      <button type="button" data-settings-action="test-runtime">Otestovat AI runtime</button></div></form>`;
 }
 
 function selectField(name: string, label: string, values: string[], selected: string): string {

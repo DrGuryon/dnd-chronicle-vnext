@@ -1,6 +1,6 @@
 {
   "name": "dnd-chronicle-vnext",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A clean foundation for the next generation of D&D Chronicle.",
   "main": "dist/main/main.js",
   "author": "D&D Chronicle",
