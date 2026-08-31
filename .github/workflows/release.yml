@@ -19,13 +19,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run dist:win:publish
+      - name: Build Windows installer
+        run: npm run dist:win
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-      - name: Ensure all public release assets are attached
+      - name: Publish public release assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,6 +34,11 @@ jobs:
           $canonicalBlockmap = "$canonicalInstaller.blockmap"
           Copy-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe" -Destination $canonicalInstaller
           Copy-Item -LiteralPath "release\D&D-Chronicle-vNext-Setup-$releaseVersion.exe.blockmap" -Destination $canonicalBlockmap
+
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME --title $env:GITHUB_REF_NAME --generate-notes
+          }
 
           $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" | ConvertFrom-Json
           foreach ($asset in $release.assets | Where-Object { $_.name -like 'D.D-Chronicle-vNext-Setup-*' }) {
