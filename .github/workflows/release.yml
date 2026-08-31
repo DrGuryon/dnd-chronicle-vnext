@@ -20,7 +20,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build Windows installer
-        run: npm run dist:win
+        run: npm run dist:win -- --publish never
         env:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
