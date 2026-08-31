@@ -98,6 +98,7 @@ function renderCard(card: EntityCardView): string {
       ` : ''}
       ${renderCharacterState(card)}
       ${renderLinkedState(card)}
+      ${renderRelationships(card)}
       ${related.length ? `
         <section class="card-related">
           <h3>Související</h3>
@@ -134,6 +135,13 @@ function cardFacts(card: EntityCardView): Array<[string, string]> {
           ? [['Vztahy', card.relationshipSummary.join(' · ')] as [string, string]]
           : []),
       ];
+    case 'creature':
+      return [
+        ['Stav', card.currentLifeStateId.replace('life_state_', '')],
+        ...(card.relationshipSummary.length
+          ? [['Vztahy', card.relationshipSummary.join(' · ')] as [string, string]]
+          : []),
+      ];
     case 'effect':
       return [
         ['Stav', card.active ? 'Aktivní' : 'Ukončený'],
@@ -142,6 +150,12 @@ function cardFacts(card: EntityCardView): Array<[string, string]> {
       ];
     case 'action':
       return [['Typ akce', humanize(card.actionType)], ...recordFacts(card.mechanics)];
+    case 'event':
+      return [
+        ['Typ události', humanize(card.eventType)],
+        ['Pořadí', String(card.sequence)],
+        ...(card.sourceMessageId ? [['Zdrojová zpráva', card.sourceMessageId] as [string, string]] : []),
+      ];
   }
 }
 
@@ -175,13 +189,51 @@ function renderLinkedState(card: EntityCardView): string {
   `;
 }
 
+function renderRelationships(card: EntityCardView): string {
+  if (card.cardType !== 'character' && card.cardType !== 'creature') return '';
+  if (!card.relationships.length) return '';
+  return `<section class="card-related relationship-details">
+    <h3>Vztahy</h3>
+    ${card.relationships.map((relationship) => {
+      const otherIsSource = relationship.targetEntityId === card.id;
+      const other: EntitySummary = {
+        id: otherIsSource ? relationship.sourceEntityId : relationship.targetEntityId,
+        kind: otherIsSource ? relationship.sourceEntityType : relationship.targetEntityType,
+        label: otherIsSource ? relationship.sourceName : relationship.targetName,
+        subtitle: relationship.relationType,
+      };
+      return `<article>
+        ${entityReference(other)}
+        <p>${escapeHtml(relationship.currentSummary)}</p>
+        ${relationship.historySummary ? `<small>${escapeHtml(relationship.historySummary)}</small>` : ''}
+        <div class="relationship-events">${relationship.eventReferences.map((reference) => entityReference({
+          id: reference.eventId,
+          kind: 'Event',
+          label: `#${reference.eventSequence}`,
+          subtitle: reference.summary,
+        })).join('')}</div>
+      </article>`;
+    }).join('')}
+  </section>`;
+}
+
 function collectReferences(card: EntityCardView): EntitySummary[] {
   const values = [...card.references];
   if (card.cardType === 'item' && card.effectiveLocation) values.push(card.effectiveLocation);
   if (card.cardType === 'location') values.push(...card.children);
-  if (card.cardType === 'character') {
-    if (card.species) values.push(card.species);
+  if (card.cardType === 'event' && card.location) values.push(card.location);
+  if (card.cardType === 'character' || card.cardType === 'creature') {
+    if (card.cardType === 'character' && card.species) values.push(card.species);
     if (card.currentLocation) values.push(card.currentLocation);
+    for (const relationship of card.relationships) {
+      const otherIsSource = relationship.targetEntityId === card.id;
+      values.push({
+        id: otherIsSource ? relationship.sourceEntityId : relationship.targetEntityId,
+        kind: otherIsSource ? relationship.sourceEntityType : relationship.targetEntityType,
+        label: otherIsSource ? relationship.sourceName : relationship.targetName,
+        subtitle: relationship.relationType,
+      });
+    }
   }
   const seen = new Set<string>();
   return values.filter((value) => {

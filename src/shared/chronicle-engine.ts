@@ -97,7 +97,7 @@ export interface SceneContextView {
 
 export const CharacterContextSections = [
   'identity', 'biography', 'combat', 'resources', 'actions', 'features',
-  'spellcasting', 'inventory', 'relations', 'knowledge',
+  'spellcasting', 'inventory', 'relations', 'relationships', 'knowledge',
 ] as const;
 export type CharacterContextSection = typeof CharacterContextSections[number];
 
@@ -176,7 +176,7 @@ export interface EntityResolutionResult {
 }
 
 export interface CampaignSearchResult {
-  kind: 'entity' | 'event' | 'message' | 'knowledge';
+  kind: 'entity' | 'event' | 'message' | 'knowledge' | 'relationship';
   id: string;
   score: number;
   title: string;
@@ -247,6 +247,14 @@ export type TurnChange =
     }
   | { type: 'relation.end'; relationId: string }
   | {
+      type: 'actorRelationship.upsert'; relationshipId?: string;
+      relationId?: string; sourceEntityId: string; targetEntityId: string;
+      relationType: string; visibilityScope: KnowledgeVisibilityScope;
+      observerEntityId?: string | null; currentSummary: string;
+      historySummary?: string | null; referencedEventIds?: readonly string[];
+      referenceCurrentEvent?: boolean;
+    }
+  | {
       type: 'knowledge.add'; knowledgeId?: string; subjectEntityId: string;
       observerEntityId?: string | null; visibilityScope: KnowledgeVisibilityScope;
       knowledgeType: string; value?: string | null; referenceEntityId?: string | null;
@@ -271,7 +279,7 @@ export interface TurnTransaction {
 }
 
 export interface ProposedTurnTransaction {
-  event: { eventType: string; summary: string };
+  event: { eventType: string; summary: string; locationId?: string | null };
   changes: readonly TurnChange[];
   reasoningSummary?: string;
 }

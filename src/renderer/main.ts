@@ -3,6 +3,7 @@ import type { BootstrapInfo, UpdateState } from '../shared/contracts';
 import { CharacterCockpitController } from './character-cockpit';
 import { EntityCardHost } from './entity-card';
 import { RuntimeControls } from './runtime-controls';
+import { AiChatController } from './ai-chat';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 if (!appRoot) {
@@ -47,6 +48,8 @@ appRoot.innerHTML = `
       </header>
 
       <section class="runtime-controls" data-runtime-controls aria-label="Aktivní scéna"></section>
+
+      <section class="ai-chat" data-ai-chat aria-label="Chronicle Chat"></section>
 
       <section class="hero">
         <div class="hero-copy">
@@ -109,14 +112,20 @@ appRoot.innerHTML = `
 
     <aside class="cockpit-panel" data-cockpit aria-label="Character Cockpit"></aside>
     <dialog class="entity-card-dialog" data-entity-card-dialog aria-label="Detail entity"></dialog>
+    <dialog class="ai-settings-dialog" data-ai-settings-dialog aria-label="Nastavení AI"></dialog>
   </div>
 `;
 
 const updateButton = requireElement<HTMLButtonElement>('[data-update-action]');
 const cockpit = new CharacterCockpitController(requireElement<HTMLElement>('[data-cockpit]'));
+const aiChat = new AiChatController(
+  requireElement<HTMLElement>('[data-ai-chat]'),
+  requireElement<HTMLDialogElement>('[data-ai-settings-dialog]'),
+);
 const runtimeControls = new RuntimeControls(
   requireElement<HTMLElement>('[data-runtime-controls]'),
   (characterId) => cockpit.load(characterId),
+  () => aiChat.load(),
 );
 new EntityCardHost(requireElement<HTMLDialogElement>('[data-entity-card-dialog]'));
 let latestUpdateState: UpdateState;

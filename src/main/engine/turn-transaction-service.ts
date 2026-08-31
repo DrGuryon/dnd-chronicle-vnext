@@ -323,6 +323,77 @@ export class TurnTransactionService {
         if (row.campaignId !== campaignId) throw crossCampaign('Relation patří do jiné Campaign.');
         return;
       }
+      case 'actorRelationship.upsert': {
+        const source = this.requireEntity(change.sourceEntityId, campaignId);
+        const target = this.requireEntity(change.targetEntityId, campaignId);
+        if (!isActorType(source.entityType) || !isActorType(target.entityType)) {
+          throw invalid('Actor relationship může spojovat jen Character nebo Creature.');
+        }
+        if (change.sourceEntityId === change.targetEntityId) throw invalid('Actor relationship nemůže spojovat aktéra se sebou samým.');
+        if (!validText(change.relationType)) throw invalid('Relationship type nesmí být prázdný.');
+        if (!validText(change.currentSummary) || change.currentSummary.length > 600) {
+          throw outOfBounds('Current relationship summary musí mít 1 až 600 znaků.');
+        }
+        if (change.historySummary != null && change.historySummary.length > 3000) {
+          throw outOfBounds('Relationship history summary může mít nejvýše 3000 znaků.');
+        }
+        if (!['world', 'public', 'observer'].includes(change.visibilityScope)) throw invalid('Neplatná visibility relationship.');
+        if (change.visibilityScope === 'observer' && !change.observerEntityId) {
+          throw new ChronicleEngineError('KNOWLEDGE_SCOPE_DENIED', 'Observer relationship vyžaduje observerEntityId.');
+        }
+        if (change.visibilityScope !== 'observer' && change.observerEntityId) {
+          throw new ChronicleEngineError('KNOWLEDGE_SCOPE_DENIED', 'World/public relationship nesmí mít observerEntityId.');
+        }
+        if (change.observerEntityId) {
+          const observer = this.requireEntity(change.observerEntityId, campaignId);
+          if (!isActorType(observer.entityType)) throw invalid('Relationship observer musí být Character nebo Creature.');
+        }
+        let relationId = change.relationId ?? null;
+        if (relationId) {
+          const relation = this.database.prepare(`
+            SELECT campaign_id AS campaignId, source_entity_id AS sourceEntityId,
+                   target_entity_id AS targetEntityId, relation_type AS relationType,
+                   to_event_id AS toEventId
+            FROM entity_relations WHERE id = ?
+          `).get(relationId) as unknown as {
+            campaignId: string; sourceEntityId: string; targetEntityId: string;
+            relationType: string; toEventId: string | null;
+          } | undefined;
+          if (relation) {
+            if (relation.campaignId !== campaignId) throw crossCampaign('Relation patří do jiné Campaign.');
+            if (relation.toEventId) throw new ChronicleEngineError('TRANSACTION_CONFLICT', 'Ukončenou relation nelze aktualizovat.');
+            if (relation.sourceEntityId !== change.sourceEntityId
+              || relation.targetEntityId !== change.targetEntityId
+              || relation.relationType !== change.relationType.trim()) {
+              throw new ChronicleEngineError('TRANSACTION_CONFLICT', 'Existující relation má jiné aktéry nebo typ.');
+            }
+          }
+        }
+        if (change.relationshipId) {
+          const profile = this.database.prepare(`
+            SELECT relation_id AS relationId, visibility_scope AS visibilityScope,
+                   observer_entity_id AS observerEntityId
+            FROM relationship_profiles WHERE id = ?
+          `).get(change.relationshipId) as unknown as {
+            relationId: string; visibilityScope: string; observerEntityId: string | null;
+          } | undefined;
+          if (profile) {
+            relationId ??= profile.relationId;
+            if (profile.relationId !== relationId
+              || profile.visibilityScope !== change.visibilityScope
+              || profile.observerEntityId !== (change.observerEntityId ?? null)) {
+              throw new ChronicleEngineError('TRANSACTION_CONFLICT', 'Relationship profil má jinou relation nebo visibility.');
+            }
+          }
+        }
+        for (const eventId of new Set(change.referencedEventIds ?? [])) {
+          const event = this.database.prepare('SELECT campaign_id AS campaignId FROM events WHERE id = ?')
+            .get(eventId) as unknown as { campaignId: string } | undefined;
+          if (!event) throw notFound(`Event ${eventId} neexistuje.`);
+          if (event.campaignId !== campaignId) throw crossCampaign(`Event ${eventId} patří do jiné Campaign.`);
+        }
+        return;
+      }
       case 'knowledge.add':
         this.requireEntity(change.subjectEntityId, campaignId);
         if (change.observerEntityId) this.requireEntity(change.observerEntityId, campaignId);
@@ -357,6 +428,7 @@ export class TurnTransactionService {
     const deathSaveValues = new Map<string, number>();
     const effectIds = new Set<string>();
     const relationIds = new Set<string>();
+    const relationshipIds = new Set<string>();
     const knowledgeIds = new Set<string>();
     const issue = (code: ChronicleErrorCode, message: string, changeIndex: number) => {
       issues.push({ code, message, changeIndex });
@@ -417,6 +489,13 @@ export class TurnTransactionService {
           if (change.relationId && relationIds.has(change.relationId)) issue('TRANSACTION_CONFLICT', `Relation ${change.relationId} je v transaction vícekrát.`, index);
           if (change.relationId) relationIds.add(change.relationId);
           break;
+        case 'actorRelationship.upsert': {
+          const key = change.relationshipId
+            ?? `${change.relationId ?? `${change.sourceEntityId}:${change.targetEntityId}:${change.relationType}`}:${change.visibilityScope}:${change.observerEntityId ?? ''}`;
+          if (relationshipIds.has(key)) issue('TRANSACTION_CONFLICT', 'Stejný relationship profil je v transaction vícekrát.', index);
+          relationshipIds.add(key);
+          break;
+        }
         case 'knowledge.add':
           if (change.knowledgeId && knowledgeIds.has(change.knowledgeId)) issue('TRANSACTION_CONFLICT', `Knowledge ${change.knowledgeId} je v transaction vícekrát.`, index);
           if (change.knowledgeId) knowledgeIds.add(change.knowledgeId);
@@ -580,6 +659,70 @@ export class TurnTransactionService {
         this.database.prepare('UPDATE entity_relations SET to_event_id = ? WHERE id = ?').run(eventId, change.relationId);
         return [relation.sourceEntityId, relation.targetEntityId];
       }
+      case 'actorRelationship.upsert': {
+        let relationId = change.relationId ?? createDomainId('relation');
+        const relation = this.database.prepare('SELECT id FROM entity_relations WHERE id = ?').get(relationId);
+        if (!relation) {
+          this.database.prepare(`
+            INSERT INTO entity_relations(
+              id, campaign_id, source_entity_id, target_entity_id, relation_type,
+              from_event_id, to_event_id, metadata
+            ) VALUES (?, (SELECT campaign_id FROM entities WHERE id = ?), ?, ?, ?, ?, NULL, NULL)
+          `).run(
+            relationId,
+            change.sourceEntityId,
+            change.sourceEntityId,
+            change.targetEntityId,
+            change.relationType.trim(),
+            eventId,
+          );
+        }
+        const existingProfile = this.database.prepare(`
+          SELECT id FROM relationship_profiles
+          WHERE relation_id = ? AND visibility_scope = ?
+            AND observer_entity_id IS ?
+        `).get(relationId, change.visibilityScope, change.observerEntityId ?? null) as unknown as { id: string } | undefined;
+        const relationshipId = existingProfile?.id ?? change.relationshipId ?? createDomainId('relationship');
+        this.database.prepare(`
+          INSERT INTO relationship_profiles(
+            id, relation_id, visibility_scope, observer_entity_id,
+            current_summary, history_summary, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            current_summary = excluded.current_summary,
+            history_summary = excluded.history_summary,
+            updated_at = excluded.updated_at
+        `).run(
+          relationshipId,
+          relationId,
+          change.visibilityScope,
+          change.observerEntityId ?? null,
+          change.currentSummary.trim(),
+          change.historySummary?.trim() || null,
+          now,
+          now,
+        );
+        const insertReference = this.database.prepare(`
+          INSERT OR IGNORE INTO relationship_event_references(
+            relationship_id, event_id, reference_role, note, sort_order
+          ) VALUES (?, ?, 'evidence', NULL, ?)
+        `);
+        let sortOrder = 0;
+        for (const referencedEventId of new Set(change.referencedEventIds ?? [])) {
+          insertReference.run(relationshipId, referencedEventId, sortOrder++);
+        }
+        if (change.referenceCurrentEvent ?? true) insertReference.run(relationshipId, eventId, sortOrder);
+        this.recordState(
+          change.sourceEntityId,
+          eventId,
+          'relationship',
+          relationshipId,
+          null,
+          { relationId, visibilityScope: change.visibilityScope, currentSummary: change.currentSummary.trim() },
+          now,
+        );
+        return [change.sourceEntityId, change.targetEntityId, ...(change.observerEntityId ? [change.observerEntityId] : [])];
+      }
       case 'knowledge.add': {
         const id = change.knowledgeId ?? createDomainId('knowledge');
         this.database.prepare(`
@@ -741,6 +884,11 @@ function addDerivedReferences(target: Map<string, Set<string>>, change: TurnChan
       addReference(target, change.targetEntityId, 'target');
       break;
     case 'relation.end': break;
+    case 'actorRelationship.upsert':
+      addReference(target, change.sourceEntityId, 'actor');
+      addReference(target, change.targetEntityId, 'target');
+      if (change.observerEntityId) addReference(target, change.observerEntityId, 'observer');
+      break;
     case 'knowledge.add':
       addReference(target, change.subjectEntityId, 'subject');
       if (change.observerEntityId) addReference(target, change.observerEntityId, 'observer');
@@ -780,6 +928,10 @@ function payloadHash(transaction: TurnTransaction): string {
 
 function validText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isActorType(type: EntityType): type is 'Character' | 'Creature' {
+  return type === 'Character' || type === 'Creature';
 }
 
 function finite(value: number, label: string): void {

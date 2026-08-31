@@ -10,6 +10,7 @@ export const CharacterPanelSectionIds = [
   'proficiencies',
   'languages',
   'effects',
+  'relationships',
   'notes',
 ] as const;
 
@@ -45,8 +46,10 @@ export type EntityCardKind =
   | 'Item'
   | 'Location'
   | 'Character'
+  | 'Creature'
   | 'Effect'
-  | 'Action';
+  | 'Action'
+  | 'Event';
 
 export interface EntitySummary {
   id: string;
@@ -231,6 +234,7 @@ export interface CharacterCockpitView {
   proficiencies: CockpitProficiencyView[];
   languages: CockpitProficiencyView[];
   inventory: CockpitInventoryItemView[];
+  relationships: import('./relationships').ActorRelationshipView[];
   notes: {
     age: number | null;
     alignment: string | null;
@@ -299,6 +303,15 @@ export interface CharacterCardView extends EntityCardBase {
   species: EntitySummary | null;
   currentLocation: EntitySummary | null;
   relationshipSummary: string[];
+  relationships: import('./relationships').ActorRelationshipView[];
+}
+
+export interface CreatureCardView extends EntityCardBase {
+  cardType: 'creature';
+  currentLocation: EntitySummary | null;
+  currentLifeStateId: string;
+  relationshipSummary: string[];
+  relationships: import('./relationships').ActorRelationshipView[];
 }
 
 export interface EffectCardView extends EntityCardBase {
@@ -316,11 +329,22 @@ export interface ActionCardView extends EntityCardBase {
   source: EntitySummary | null;
 }
 
+export interface EventCardView extends EntityCardBase {
+  cardType: 'event';
+  eventType: string;
+  sequence: number;
+  timestamp: string | null;
+  sourceMessageId: string | null;
+  location: EntitySummary | null;
+}
+
 export type EntityCardView =
   | DefinitionCardView
   | FeatureCardView
   | ItemCardView
   | LocationCardView
   | CharacterCardView
+  | CreatureCardView
   | EffectCardView
-  | ActionCardView;
+  | ActionCardView
+  | EventCardView;

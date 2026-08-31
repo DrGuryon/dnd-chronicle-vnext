@@ -95,6 +95,25 @@ const api: ChronicleApi = {
     'conversation:create',
     command,
   ) as ReturnType<ChronicleApi['createConversation']>,
+  getConversationMessages: (conversationId) => ipcRenderer.invoke(
+    'conversation:list-messages', conversationId,
+  ) as ReturnType<ChronicleApi['getConversationMessages']>,
+  getAiSettings: (campaignId) => ipcRenderer.invoke('ai:get-settings', campaignId) as ReturnType<ChronicleApi['getAiSettings']>,
+  saveAiSettings: (command) => ipcRenderer.invoke('ai:save-settings', command) as ReturnType<ChronicleApi['saveAiSettings']>,
+  getAiSecretStatus: () => ipcRenderer.invoke('ai:get-secret-status') as ReturnType<ChronicleApi['getAiSecretStatus']>,
+  setAiApiKey: (apiKey) => ipcRenderer.invoke('ai:set-api-key', apiKey) as ReturnType<ChronicleApi['setAiApiKey']>,
+  removeAiApiKey: () => ipcRenderer.invoke('ai:remove-api-key') as ReturnType<ChronicleApi['removeAiApiKey']>,
+  testAiConnection: (campaignId) => ipcRenderer.invoke('ai:test-connection', campaignId) as ReturnType<ChronicleApi['testAiConnection']>,
+  startAiTurn: (request) => ipcRenderer.invoke('ai:start-turn', request) as ReturnType<ChronicleApi['startAiTurn']>,
+  cancelAiTurn: (runId) => ipcRenderer.invoke('ai:cancel-turn', runId) as ReturnType<ChronicleApi['cancelAiTurn']>,
+  getPendingAiProposals: (campaignId) => ipcRenderer.invoke('ai:list-pending-proposals', campaignId) as ReturnType<ChronicleApi['getPendingAiProposals']>,
+  applyAiProposal: (proposalId) => ipcRenderer.invoke('ai:apply-proposal', proposalId) as ReturnType<ChronicleApi['applyAiProposal']>,
+  rejectAiProposal: (proposalId) => ipcRenderer.invoke('ai:reject-proposal', proposalId) as ReturnType<ChronicleApi['rejectAiProposal']>,
+  onAiTurnEvent: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, update: Parameters<typeof listener>[0]): void => listener(update);
+    ipcRenderer.on('ai:turn-event', handler);
+    return () => ipcRenderer.removeListener('ai:turn-event', handler);
+  },
   getSceneContext: (campaignId) => ipcRenderer.invoke(
     'engine:get-scene-context',
     campaignId,

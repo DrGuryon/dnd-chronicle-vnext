@@ -7,6 +7,7 @@ export class RuntimeControls {
   constructor(
     private readonly root: HTMLElement,
     private readonly onCharacterChanged: (characterId?: string) => Promise<void>,
+    private readonly onWorkspaceChanged: () => Promise<void> = async () => {},
   ) {
     root.addEventListener('change', (event) => void this.onChange(event));
     root.addEventListener('click', (event) => void this.onClick(event));
@@ -17,6 +18,7 @@ export class RuntimeControls {
       const workspace = await window.chronicle.getRuntimeWorkspace(campaignId);
       this.campaign = workspace.campaigns[0] ?? null;
       this.render(workspace.campaigns);
+      await this.onWorkspaceChanged();
     } catch (error) {
       this.root.innerHTML = `<p class="runtime-error">${escapeHtml(errorMessage(error))}</p>`;
     }

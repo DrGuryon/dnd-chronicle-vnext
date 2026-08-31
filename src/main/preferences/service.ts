@@ -15,6 +15,7 @@ const defaultCollapsed: CharacterPanelSectionId[] = [
   'defenses',
   'proficiencies',
   'languages',
+  'relationships',
   'notes',
 ];
 

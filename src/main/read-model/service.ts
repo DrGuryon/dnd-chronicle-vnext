@@ -3,6 +3,7 @@ import type { Character, ItemPlacement } from '../../domain/models';
 import type {
   ActionCardView,
   CharacterCardView,
+  CreatureCardView,
   CharacterCockpitView,
   CockpitActionView,
   CockpitEffectView,
@@ -15,6 +16,7 @@ import type {
   EntityCardRequest,
   EntityCardView,
   EntitySummary,
+  EventCardView,
   FeatureCardView,
   ItemCardView,
   LocationCardView,
@@ -22,6 +24,7 @@ import type {
 import { CharacterDomainService } from '../character/service';
 import { ChronicleDomainService } from '../domain/service';
 import { UiPreferencesService } from '../preferences/service';
+import { ActorRelationshipService } from '../relationships/service';
 
 const abilityAbbreviations = {
   strength: 'STR',
@@ -37,6 +40,7 @@ export class ChronicleReadModelService {
     private readonly domain: ChronicleDomainService,
     private readonly characters: CharacterDomainService,
     private readonly preferences: UiPreferencesService,
+    private readonly relationships: ActorRelationshipService,
     private readonly activeCharacterId: () => string | null = () => null,
   ) {}
 
@@ -234,6 +238,14 @@ export class ChronicleReadModelService {
         placementLabel: `Drží ${character.name}`,
         card: entitySummary(item.id, 'Item', item.name, `×${item.quantity}`, characterId),
       })),
+      relationships: this.relationships.getActorRelationships({
+        campaignId: character.campaignId,
+        actorId: characterId,
+        observerEntityId: characterId,
+        includeHistory: false,
+        maxResults: 20,
+        maxCharacters: 8_000,
+      }).relationships,
       notes: {
         age: biography.age,
         alignment: biography.alignment,
@@ -263,7 +275,15 @@ export class ChronicleReadModelService {
     if (request.id.startsWith('effect_')) return this.effectCard(request.id);
     if (request.id.startsWith('item_')) return this.itemCard(request.id, request.characterId);
     if (request.id.startsWith('loc_')) return this.locationCard(request.id, request.characterId);
-    if (request.id.startsWith('char_')) return this.characterCard(request.id, request.observerEntityId);
+    if (request.id.startsWith('char_')) return this.characterCard(
+      request.id,
+      request.observerEntityId ?? request.characterId,
+    );
+    if (request.id.startsWith('creature_')) return this.creatureCard(
+      request.id,
+      request.observerEntityId ?? request.characterId,
+    );
+    if (request.id.startsWith('event_')) return this.eventCard(request.id, request.characterId);
     throw new Error(`Pro ${request.id} není dostupná Entity Card.`);
   }
 
@@ -462,12 +482,19 @@ export class ChronicleReadModelService {
     const currentLocation = character.currentLocationId
       ? this.locationSummary(character.currentLocationId)
       : null;
-    const relationshipSummary = this.domain.listRelationsForEntity(characterId).map((relation) => {
-      const otherId = relation.sourceEntityId === characterId
-        ? relation.targetEntityId
-        : relation.sourceEntityId;
-      const other = this.trySummary(otherId, characterId);
-      return `${relation.relationType}: ${other?.label ?? otherId}`;
+    const relationships = this.relationships.getActorRelationships({
+      campaignId: character.campaignId,
+      actorId: characterId,
+      observerEntityId: observerEntityId ?? null,
+      includeHistory: true,
+      maxResults: 20,
+      maxCharacters: 16_000,
+    }).relationships;
+    const relationshipSummary = relationships.map((relationship) => {
+      const other = relationship.sourceEntityId === characterId
+        ? relationship.targetName
+        : relationship.sourceName;
+      return `${relationship.relationType}: ${other} — ${relationship.currentSummary}`;
     });
     return {
       cardType: 'character',
@@ -481,7 +508,62 @@ export class ChronicleReadModelService {
       species,
       currentLocation,
       relationshipSummary,
+      relationships,
       references: [species, currentLocation].filter((value): value is EntitySummary => value !== null),
+    };
+  }
+
+  private creatureCard(creatureId: string, observerEntityId?: string): CreatureCardView {
+    const creature = this.domain.getCreature(creatureId);
+    if (!creature) throw new Error(`Creature ${creatureId} neexistuje.`);
+    const currentLocation = creature.currentLocationId
+      ? this.locationSummary(creature.currentLocationId)
+      : null;
+    const relationships = this.relationships.getActorRelationships({
+      campaignId: creature.campaignId,
+      actorId: creatureId,
+      observerEntityId: observerEntityId ?? null,
+      includeHistory: true,
+      maxResults: 20,
+      maxCharacters: 16_000,
+    }).relationships;
+    return {
+      cardType: 'creature',
+      id: creature.id,
+      kind: 'Creature',
+      name: creature.name,
+      description: creature.description,
+      imageResourceId: creature.imageResourceId,
+      currentLocation,
+      currentLifeStateId: creature.currentLifeStateId,
+      relationshipSummary: relationships.map((relationship) => {
+        const other = relationship.sourceEntityId === creatureId
+          ? relationship.targetName
+          : relationship.sourceName;
+        return `${relationship.relationType}: ${other} — ${relationship.currentSummary}`;
+      }),
+      relationships,
+      references: currentLocation ? [currentLocation] : [],
+    };
+  }
+
+  private eventCard(eventId: string, contextCharacterId?: string): EventCardView {
+    const event = this.domain.getEvent(eventId);
+    if (!event) throw new Error(`Event ${eventId} neexistuje.`);
+    const location = event.locationId ? this.locationSummary(event.locationId) : null;
+    return {
+      cardType: 'event',
+      id: event.id,
+      kind: 'Event',
+      name: `Událost #${event.sequence}`,
+      description: event.summary,
+      imageResourceId: null,
+      eventType: event.eventType,
+      sequence: event.sequence,
+      timestamp: event.timestamp,
+      sourceMessageId: event.sourceMessageId,
+      location,
+      references: location ? [{ ...location, contextCharacterId }] : [],
     };
   }
 
@@ -592,6 +674,8 @@ export class ChronicleReadModelService {
     if (character) {
       return entitySummary(character.id, 'Character', character.name, character.characterType, contextCharacterId);
     }
+    const creature = this.domain.getCreature(id);
+    if (creature) return entitySummary(creature.id, 'Creature', creature.name, 'Creature', contextCharacterId);
     const location = this.domain.getLocation(id);
     if (location) return entitySummary(location.id, 'Location', location.name, location.locationType, contextCharacterId);
     const item = this.domain.getItem(id);
@@ -611,6 +695,8 @@ export class ChronicleReadModelService {
     if (action) return entitySummary(action.id, 'Action', action.name, action.actionType, contextCharacterId);
     const effect = this.characters.getEffect(id);
     if (effect) return entitySummary(effect.id, 'Effect', effect.name, effect.durationType, contextCharacterId);
+    const event = this.domain.getEvent(id);
+    if (event) return entitySummary(event.id, 'Event', `Událost #${event.sequence}`, event.summary, contextCharacterId);
     return null;
   }
 

@@ -509,6 +509,15 @@ export class SqliteChronicleRepository {
     );
   }
 
+  getEvent(id: string): ChronicleEvent | undefined {
+    return this.database.prepare(`
+      SELECT id, campaign_id AS campaignId, event_type AS eventType, sequence,
+             occurred_at AS timestamp, location_id AS locationId, summary,
+             source_message_id AS sourceMessageId, created_at AS createdAt
+      FROM events WHERE id = ?
+    `).get(id) as unknown as ChronicleEvent | undefined;
+  }
+
   private insertEntity(entity: EntityBase): void {
     this.database.prepare(`
       INSERT INTO entities(

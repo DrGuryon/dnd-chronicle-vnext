@@ -20,7 +20,7 @@ describe('ChronicleDatabase', () => {
     const chronicle = await ChronicleDatabase.open(userData);
 
     expect(chronicle.path).toBe(path.join(userData, 'data', 'chronicle.db'));
-    expect(chronicle.info.schemaVersion).toBe(5);
+    expect(chronicle.info.schemaVersion).toBe(6);
     expect(chronicle.info.campaignCount).toBe(0);
     chronicle.close();
   });
@@ -37,7 +37,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const reopened = await ChronicleDatabase.open(userData);
-    expect(reopened.info.schemaVersion).toBe(5);
+    expect(reopened.info.schemaVersion).toBe(6);
     expect(reopened.info.campaignCount).toBe(1);
     expect(reopened.info.backupCreated).toBeUndefined();
     reopened.close();
@@ -75,7 +75,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(5);
+    expect(migrated.info.schemaVersion).toBe(6);
     expect(migrated.info.campaignCount).toBe(1);
     expect(migrated.info.backupCreated).toBeDefined();
     expect((await stat(migrated.info.backupCreated!)).size).toBeGreaterThan(0);
@@ -117,7 +117,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(5);
+    expect(migrated.info.schemaVersion).toBe(6);
     expect(migrated.info.backupCreated).toBeDefined();
     expect(migrated.domain.getCampaign('campaign-v2')?.name).toBe('Version two');
     expect(migrated.characters.listDefinitions()).toEqual([]);
@@ -157,7 +157,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(5);
+    expect(migrated.info.schemaVersion).toBe(6);
     expect(migrated.info.backupCreated).toBeDefined();
     migrated.close();
 
@@ -203,7 +203,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(5);
+    expect(migrated.info.schemaVersion).toBe(6);
     expect(migrated.info.backupCreated).toBeDefined();
     expect(migrated.engine.getCampaignRuntimeState('campaign-v4')).toMatchObject({
       campaignId: 'campaign-v4',
@@ -223,6 +223,52 @@ describe('ChronicleDatabase', () => {
       'event_entity_references',
       'turn_transactions',
       'campaign_search_fts',
+    ]));
+    inspected.close();
+  });
+
+  it('migrates a version 5 Chronicle database to AI settings and relationships without losing campaigns', async () => {
+    const userData = await createTemporaryDirectory();
+    const dataDirectory = path.join(userData, 'data');
+    await mkdir(dataDirectory, { recursive: true });
+    const databasePath = path.join(dataDirectory, 'chronicle.db');
+    const database = new DatabaseSync(databasePath);
+    database.function('chronicle_normalize', (value: unknown) => String(value ?? '').toLowerCase());
+    database.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      ) STRICT;
+    `);
+    for (const migration of migrations.filter((candidate) => candidate.version <= 5)) {
+      migration.up(database);
+      database.prepare('INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)')
+        .run(migration.version, migration.name, '2026-01-01T00:00:00.000Z');
+      database.exec(`PRAGMA user_version = ${migration.version};`);
+    }
+    database.prepare(`
+      INSERT INTO campaigns(id, name, created_at, updated_at, ruleset_id, ruleset_version)
+      VALUES ('campaign-v5', 'Version five', ?, ?, 'dnd5e', '2024')
+    `).run('2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+    database.close();
+
+    const migrated = await ChronicleDatabase.open(userData);
+    expect(migrated.info.schemaVersion).toBe(6);
+    expect(migrated.info.backupCreated).toBeDefined();
+    expect(migrated.domain.getCampaign('campaign-v5')?.name).toBe('Version five');
+    expect(migrated.aiSettings.get('campaign-v5')).toMatchObject({
+      modelId: 'gpt-5.6-sol', approvalPolicy: 'review',
+    });
+    migrated.close();
+
+    const inspected = new DatabaseSync(databasePath);
+    const tables = inspected.prepare(`
+      SELECT name FROM sqlite_master WHERE type = 'table'
+    `).all() as unknown as Array<{ name: string }>;
+    expect(tables.map((row) => row.name)).toEqual(expect.arrayContaining([
+      'campaign_ai_settings', 'ai_turn_runs', 'pending_turn_proposals',
+      'relationship_profiles', 'relationship_event_references',
     ]));
     inspected.close();
   });

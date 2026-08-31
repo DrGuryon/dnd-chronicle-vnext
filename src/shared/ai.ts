@@ -1,0 +1,111 @@
+import type { ApprovalPolicy, ChronicleToolDescriptor, TurnTransaction, TurnValidationResult } from './chronicle-engine';
+import type { TurnTransactionResult } from './chronicle-engine';
+
+export type AiProviderId = 'openai' | 'fake';
+export type AiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type AiVerbosity = 'low' | 'medium' | 'high';
+
+export interface CampaignAiSettings {
+  campaignId: string;
+  provider: 'openai';
+  modelId: string;
+  reasoningEffort: AiReasoningEffort;
+  verbosity: AiVerbosity;
+  maxOutputTokens: number;
+  approvalPolicy: ApprovalPolicy;
+  campaignInstructions: string;
+  updatedAt: string;
+}
+
+export interface CampaignAiSettingsUpdate {
+  modelId?: string;
+  reasoningEffort?: AiReasoningEffort;
+  verbosity?: AiVerbosity;
+  maxOutputTokens?: number;
+  approvalPolicy?: ApprovalPolicy;
+  campaignInstructions?: string;
+}
+
+export interface AiSecretStatus {
+  configured: boolean;
+  source: 'safe-storage' | 'environment' | 'session' | 'none';
+  persistence: 'encrypted' | 'environment' | 'session' | 'none';
+  maskedSuffix: string | null;
+}
+
+export interface AiToolCall {
+  callId: string;
+  name: string;
+  arguments: unknown;
+}
+
+export interface AiUsage {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  cachedInputTokens: number;
+}
+
+export type AiProviderEvent =
+  | { type: 'text-delta'; delta: string }
+  | { type: 'tool-start'; callId: string; name: string }
+  | { type: 'tool-finish'; callId: string; name: string; outputTruncated: boolean }
+  | { type: 'usage'; usage: AiUsage }
+  | { type: 'completed'; responseId: string | null; text: string };
+
+export interface AiProviderTurnInput {
+  modelId: string;
+  reasoningEffort: AiReasoningEffort;
+  verbosity: AiVerbosity;
+  maxOutputTokens: number;
+  instructions: string;
+  input: readonly unknown[];
+  tools: readonly ChronicleToolDescriptor[];
+  executeTool(call: AiToolCall): Promise<{ output: unknown; truncated: boolean }>;
+  signal?: AbortSignal;
+}
+
+export interface AiProviderConnectionResult {
+  ok: boolean;
+  modelId: string;
+  message: string;
+}
+
+export interface AiProvider {
+  readonly id: AiProviderId;
+  runTurn(input: AiProviderTurnInput): AsyncIterable<AiProviderEvent>;
+  testConnection(modelId: string, signal?: AbortSignal): Promise<AiProviderConnectionResult>;
+}
+
+export interface AiTurnRequest {
+  campaignId: string;
+  conversationId: string;
+  content: string;
+}
+
+export interface AiProposalApplyResult {
+  proposal: PendingTurnProposal;
+  result: TurnTransactionResult;
+}
+
+export interface PendingTurnProposal {
+  id: string;
+  turnRunId: string;
+  campaignId: string;
+  conversationId: string;
+  transaction: TurnTransaction;
+  validation: TurnValidationResult;
+  status: 'pending' | 'applied' | 'rejected' | 'manual';
+  createdAt: string;
+  updatedAt: string;
+  appliedEventId: string | null;
+}
+
+export type AiTurnClientEvent =
+  | { type: 'started'; runId: string; conversationId: string; userMessageId: string }
+  | { type: 'text-delta'; runId: string; delta: string }
+  | { type: 'tool-status'; runId: string; name: string; status: 'running' | 'completed' }
+  | { type: 'proposal'; runId: string; proposal: PendingTurnProposal }
+  | { type: 'completed'; runId: string; assistantMessageId: string; proposal: PendingTurnProposal | null }
+  | { type: 'failed'; runId: string; code: string; message: string }
+  | { type: 'cancelled'; runId: string };

@@ -1,15 +1,22 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
 import electronLog from 'electron-log/main';
 import path from 'node:path';
 import { ChronicleDatabase } from './database';
 import { ChronicleIpcService } from './ipc/chronicle-ipc-service';
 import { UpdateController } from './updater';
 import type { BootstrapInfo } from '../shared/contracts';
+import type { AiTurnRequest } from '../shared/ai';
+import { AiSecretStore } from './ai/secret-store';
+import { AiTurnService } from './ai/turn-service';
+import { OpenAiProvider } from './ai/openai-provider';
+import { ChronicleEngineError } from './engine/service';
 
 let mainWindow: BrowserWindow | null = null;
 let chronicleDatabase: ChronicleDatabase | undefined;
 let updateController: UpdateController | undefined;
 let databaseClosed = false;
+let aiSecretStore: AiSecretStore | undefined;
+let aiTurnService: AiTurnService | undefined;
 
 const userDataOverride = process.env.DND_CHRONICLE_USER_DATA_DIR;
 if (userDataOverride) {
@@ -34,6 +41,17 @@ app.on('second-instance', () => {
 app.whenReady().then(async () => {
   try {
     chronicleDatabase = await ChronicleDatabase.open(app.getPath('userData'));
+    aiSecretStore = new AiSecretStore(app.getPath('userData'), safeStorage);
+    aiTurnService = new AiTurnService(chronicleDatabase, async () => {
+      const apiKey = await aiSecretStore!.getKey();
+      if (!apiKey) {
+        throw new ChronicleEngineError(
+          'OPENAI_KEY_MISSING',
+          'Nejdřív zadejte OpenAI API klíč v nastavení AI.',
+        );
+      }
+      return new OpenAiProvider(apiKey);
+    });
 
     if (process.argv.includes('--smoke-test')) {
       process.stdout.write(`${JSON.stringify(chronicleDatabase.info)}\n`);
@@ -141,6 +159,44 @@ function registerIpc(): void {
   handle('runtime:set-scene-location', (command) => chronicle.setSceneLocation(command));
   handle('runtime:set-scene-participants', (command) => chronicle.setSceneParticipants(command));
   handle('conversation:create', (command) => chronicle.createConversation(command));
+  handle('conversation:list-messages', (conversationId) => chronicle.listConversationMessages(conversationId));
+  handle('ai:get-settings', (campaignId) => chronicle.getAiSettings(campaignId));
+  handle('ai:save-settings', (command) => chronicle.saveAiSettings(command));
+  handle('ai:list-pending-proposals', (campaignId) => chronicle.listPendingAiProposals(campaignId));
+  ipcMain.handle('ai:get-secret-status', () => aiSecretStore?.getStatus());
+  ipcMain.handle('ai:set-api-key', (_event, apiKey: unknown) => {
+    if (typeof apiKey !== 'string') throw new Error('API klíč musí být text.');
+    return aiSecretStore?.setKey(apiKey);
+  });
+  ipcMain.handle('ai:remove-api-key', () => aiSecretStore?.removeKey());
+  ipcMain.handle('ai:test-connection', (_event, campaignId: unknown) => {
+    if (typeof campaignId !== 'string') throw new Error('Campaign ID musí být text.');
+    return aiTurnService?.testConnection(campaignId);
+  });
+  ipcMain.handle('ai:start-turn', async (event, request: AiTurnRequest) => {
+    if (!aiTurnService) throw new Error('AI služba ještě není připravená.');
+    const iterator = aiTurnService.runTurn(request)[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    if (first.done) throw new Error('AI tah se nepodařilo spustit.');
+    if (!event.sender.isDestroyed()) event.sender.send('ai:turn-event', first.value);
+    void (async () => {
+      for await (const update of { [Symbol.asyncIterator]: () => iterator }) {
+        if (!event.sender.isDestroyed()) event.sender.send('ai:turn-event', update);
+      }
+    })().catch((error: unknown) => electronLog.error('[AI turn stream]', error));
+    return { runId: first.value.runId };
+  });
+  ipcMain.handle('ai:cancel-turn', (_event, runId: unknown) => (
+    typeof runId === 'string' ? aiTurnService?.cancel(runId) ?? false : false
+  ));
+  ipcMain.handle('ai:apply-proposal', (_event, proposalId: unknown) => {
+    if (typeof proposalId !== 'string' || !aiTurnService) throw new Error('Neplatný proposal ID.');
+    return aiTurnService.applyProposal(proposalId);
+  });
+  ipcMain.handle('ai:reject-proposal', (_event, proposalId: unknown) => {
+    if (typeof proposalId !== 'string' || !aiTurnService) throw new Error('Neplatný proposal ID.');
+    return aiTurnService.rejectProposal(proposalId);
+  });
   handle('engine:get-scene-context', (campaignId) => chronicle.getSceneContext(campaignId));
   handle('engine:get-tool-catalog', () => chronicle.getChronicleToolCatalog());
   handle('engine:get-trace', () => chronicle.getChronicleTrace());

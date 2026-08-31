@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 export type DomainIdPrefix =
   | 'action'
+  | 'ai'
   | 'alias'
   | 'campaign'
   | 'char'
@@ -21,7 +22,9 @@ export type DomainIdPrefix =
   | 'movement'
   | 'pool'
   | 'proficiency'
+  | 'proposal'
   | 'relation'
+  | 'relationship'
   | 'resource'
   | 'sense'
   | 'defense'

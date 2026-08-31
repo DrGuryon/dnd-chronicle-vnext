@@ -14,6 +14,7 @@ import type {
   ChronicleToolDescriptor,
   ChronicleToolTraceEntry,
   Conversation,
+  ConversationMessage,
   RuntimeWorkspaceView,
   SceneContextView,
   SceneParticipant,
@@ -26,6 +27,7 @@ import type {
   EntitySummary,
 } from '../../shared/read-models';
 import { ChronicleDatabase } from '../database';
+import type { CampaignAiSettings, CampaignAiSettingsUpdate, PendingTurnProposal } from '../../shared/ai';
 
 export class ChronicleIpcService {
   constructor(private readonly database: ChronicleDatabase) {}
@@ -258,6 +260,28 @@ export class ChronicleIpcService {
     return this.database.engine.createConversation(domainId(input.campaignId, 'campaign'), title);
   }
 
+  listConversationMessages(value: unknown): ConversationMessage[] {
+    const conversationId = domainId(value, 'conversation');
+    return this.database.engine.listConversationMessages(conversationId, {
+      maxResults: 100,
+      maxCharacters: 100_000,
+    }).items.reverse();
+  }
+
+  getAiSettings(value: unknown): CampaignAiSettings {
+    return this.database.aiSettings.get(domainId(value, 'campaign'));
+  }
+
+  saveAiSettings(value: unknown): CampaignAiSettings {
+    const input = object(value, 'AI settings command');
+    const settings = object(input.settings, 'AI settings') as CampaignAiSettingsUpdate;
+    return this.database.aiSettings.update(domainId(input.campaignId, 'campaign'), settings);
+  }
+
+  listPendingAiProposals(value: unknown): PendingTurnProposal[] {
+    return this.database.aiProposals.listPending(domainId(value, 'campaign'));
+  }
+
   getSceneContext(value: unknown): SceneContextView {
     return this.database.engine.getSceneContext(domainId(value, 'campaign'));
   }
@@ -320,7 +344,7 @@ function entityCardRequest(value: unknown): EntityCardRequest {
   const input = object(value, 'Entity card request');
   const id = textValue(input.id, 'Entity ID');
   const characterId = optionalDomainId(input.characterId, 'char');
-  const observerEntityId = optionalDomainId(input.observerEntityId, 'char');
+  const observerEntityId = optionalActorDomainId(input.observerEntityId);
   return {
     id,
     ...(typeof input.kind === 'string' ? { kind: input.kind as EntityCardRequest['kind'] } : {}),
@@ -424,6 +448,12 @@ function domainId(value: unknown, prefix: DomainIdPrefix): string {
 
 function optionalDomainId(value: unknown, prefix: DomainIdPrefix): string | undefined {
   return value === undefined || value === null ? undefined : domainId(value, prefix);
+}
+
+function optionalActorDomainId(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const id = textValue(value, 'Actor ID');
+  return id.startsWith('creature_') ? requireDomainId(id, 'creature') : requireDomainId(id, 'char');
 }
 
 function textValue(value: unknown, label: string): string {

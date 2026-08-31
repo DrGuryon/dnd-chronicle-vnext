@@ -2,7 +2,7 @@
 
 ## Hranice procesu
 
-- **Main process** vlastní okna, SQLite connection a updater. Je jedinou vrstvou s přímým přístupem k disku.
+- **Main process** vlastní okna, SQLite connection, bezpečné uložení API klíče, AI runtime a updater. Je jedinou vrstvou s přímým přístupem k disku a síti.
 - **Preload bridge** publikuje úzké typované API. Renderer nedostává Node.js ani Electron API.
 - **Renderer** vykresluje shell, Character Cockpit a Entity Cards výhradně ze serializovatelných read modelů.
 
@@ -14,11 +14,11 @@ SQLite je lokální source of truth. Soubor je v `app.getPath('userData')/data/c
 
 Schéma používá monotónní `PRAGMA user_version` a auditní tabulku `schema_migrations`. Migrace běží v `BEGIN IMMEDIATE` transakci. Aplikace odmítne otevřít databázi s novějším schématem, aby downgrade nepoškodil data. Před každým skutečným upgradem existující databáze vytvoří SQLite backup do `userData/backups`.
 
-Schéma v3 rozšířilo storage a Milestone 2 domain foundation o praktický Character model. Schéma v4 přidalo izolované `character_panel_preferences`. Schéma v5 přidává Campaign Runtime State, Conversations/Messages, Scene participants, explicitní Event/Message entity references, Knowledge visibility scope, Turn Transactions, technický tool log a reprodukovatelný FTS5 index. Databáze v1–v4 postupují stejným monotónním migration runnerem do v5 a před upgradem vždy vznikne konzistentní backup.
+Schéma v3 rozšířilo storage o praktický Character model, v4 přidalo izolované UI preference a v5 Chronicle Engine, Conversations, Knowledge visibility, Turn Transactions a FTS5. Schéma v6 přidává `campaign_ai_settings`, auditní `ai_turn_runs`, pending proposals a actor relationship profiles s Event referencemi. Databáze v1–v5 postupují stejným monotónním runnerem do v6 a před upgradem vždy vznikne konzistentní backup.
 
 ## Chronicle Engine boundary
 
-`ChronicleEngineService` je deterministická vrstva mezi source-of-truth doménou a budoucím modelem. Sestavuje malý Hot `SceneContextView`, provádí explicitní bounded Warm/Cold dotazy a publikuje serializovatelný Chronicle Tool Catalog. Nepřijímá SQL, názvy tabulek, obecné property paths ani arbitrary patch. `ChronicleOrchestrator` pouze koordinuje context, tool calls, validaci a commit; negeneruje příběh a nevolá síť.
+`ChronicleEngineService` je deterministická vrstva mezi source-of-truth doménou a AI providerem. Sestavuje malý Hot `SceneContextView`, provádí explicitní bounded Warm/Cold dotazy a publikuje serializovatelný Chronicle Tool Catalog. Nepřijímá SQL, názvy tabulek, obecné property paths ani arbitrary patch. `AiTurnService` streamuje provider-neutral events; OpenAI adapter pouze překládá Responses API a nikdy nedostává commit tool.
 
 ```text
 Player input → SceneContext → Chronicle tools → ProposedTurnTransaction
@@ -97,6 +97,8 @@ Název nikdy není identifikátor. Nová ID používají prefixy jako `campaign_
 
 `entity_relations` je obecný časově omezený graf. `relation_type` je otevřený string a metadata je jediná záměrně rozšiřitelná JSON část tohoto modelu. Alias má vlastní identitu, volitelného pozorovatele a interval `from_event_id` / `to_event_id`.
 
+`relationship_profiles` nad stejnou kanonickou relation oddělují `world`, `public` a konkrétní `observer` pohled. Observer-specific profil má přednost před public; world profil se observerovi nikdy nevrací. `actorRelationship.upsert` je součást stejné Turn Transaction jako vzniklý Event a může na tento Event atomicky odkázat.
+
 ## Location hierarchy
 
 `locations.parent_location_id` tvoří neomezený strom. Služba `getLocationPath` prochází rodiče a zároveň detekuje případný cyklus, například:
@@ -137,6 +139,6 @@ Updater je řízen main procesem a renderer dostává pouze stavové události. 
 
 Produkční vydání musí být Authenticode podepsané. Build konfigurace zapne kontrolu podpisu, pokud je přítomen signing certifikát; lokální unsigned build používá SHA-512 integritu metadat, ale není určený k veřejné distribuci.
 
-## Hranice tohoto milestone
+## AI boundary
 
-Milestone poskytuje provider-neutral Chronicle Engine a deterministický test harness, ne skutečný model. Neobsahuje OpenAI SDK/API, lokální LLM, embeddings, vector database, prompt editor, NLP entity extraction ani automatické schvalování každého validního návrhu. Podrobný katalog a transakční kontrakty jsou v [`chronicle-engine.md`](chronicle-engine.md).
+Oficiální OpenAI SDK je uzavřené v `OpenAiProvider`; zbytek aplikace zná jen `AiProvider` a streamované události. Odpovědi používají `store: false`, lokální Messages jsou kanonická historie a provider response ani chain-of-thought se neukládají. API key je přes Electron `safeStorage` mimo DB a preload vystavuje pouze maskovaný stav. Podrobný tok je v [`ai-runtime.md`](ai-runtime.md).

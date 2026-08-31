@@ -1,6 +1,6 @@
 # D&D Chronicle vNext
 
-Funkční základ nové Windows aplikace: Electron shell, lokální SQLite databáze s verzovaným doménovým modelem, Chronicle Engine, interaktivní Character Cockpit, NSIS installer a integrovaný updater.
+Windows aplikace s lokální SQLite databází, Chronicle Engine, streamovaným AI vypravěčem přes OpenAI Responses API, interaktivním Character Cockpitem, NSIS instalátorem a integrovaným updaterem.
 
 ## Rychlý start
 
@@ -30,9 +30,13 @@ Databáze není součástí instalace. Za běhu se vytvoří v Electron `userDat
 
 Přeinstalace ani odinstalace aplikace tento adresář nemaže. Před každou budoucí migrací již existující databáze se do `backups/` vytvoří konzistentní SQLite backup.
 
-Schéma v5 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Vedle Campaign, Entity, Location a Character foundation ukládá explicitní runtime scény, konverzace, observer-aware Knowledge, entity/event reference a idempotentní Turn Transactions. V4 preference pravého panelu zůstávají izolované od světa kampaně.
+Schéma v6 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Vedle runtime scén, konverzací, observer-aware Knowledge a idempotentních Turn Transactions ukládá bezpečně filtrované vztahové profily, návrhy změn a technický audit AI tahů. V4 preference pravého panelu zůstávají izolované od světa kampaně.
 
-Renderer SQL přímo nepoužívá. Z main procesu dostává hotové read modely a používá explicitní typované commands. Chronicle Engine navíc sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny jednoho tahu. Nepřipojuje žádný AI model ani OpenAI SDK. Podrobnosti jsou v [`docs/architecture.md`](docs/architecture.md) a [`docs/chronicle-engine.md`](docs/chronicle-engine.md).
+Renderer SQL ani API klíč přímo nepoužívá. Chronicle Engine sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny jednoho tahu. OpenAI adapter používá oficiální SDK a Responses API s `store: false`; běžné testy používají Fake provider a síť nevolají. Podrobnosti jsou v [`docs/architecture.md`](docs/architecture.md), [`docs/chronicle-engine.md`](docs/chronicle-engine.md) a [`docs/ai-runtime.md`](docs/ai-runtime.md).
+
+## Nastavení AI
+
+API klíč se zadává až v aplikaci přes **Nastavení AI**. Main proces ho uloží přes Electron `safeStorage` mimo databázi kampaně. Pokud systémové šifrování není dostupné, klíč zůstane jen v paměti do ukončení aplikace; nezašifrovaný soubor se nevytvoří. Výchozí model je `gpt-5.6-sol` a lze změnit reasoning, podrobnost, tokenový limit, pokyny kampaně i režim schválení `review / automatic / manual`.
 
 ## Aktualizace
 
@@ -50,7 +54,7 @@ Pro produkční distribuci nastavte repozitářové secrets `WIN_CSC_LINK` a `WI
 
 1. Zvyšte `version` v `package.json`.
 2. Commitněte změnu.
-3. Vytvořte odpovídající tag, např. `v0.5.0`.
+3. Vytvořte odpovídající tag, např. `v0.6.0`.
 4. Pushněte tag. GitHub Actions provede testy, build a publikaci.
 
 Nikdy nemíchejte installer a `latest.yml` z různých buildů; updater ověřuje SHA-512 metadata.

@@ -105,6 +105,19 @@ export interface ChronicleApi {
   setSceneLocation(command: RuntimeSelectionCommand): Promise<CampaignRuntimeState>;
   setSceneParticipants(command: SceneParticipantsCommand): Promise<SceneParticipant[]>;
   createConversation(command: CreateConversationCommand): Promise<Conversation>;
+  getConversationMessages(conversationId: string): Promise<ConversationMessage[]>;
+  getAiSettings(campaignId: string): Promise<CampaignAiSettings>;
+  saveAiSettings(command: { campaignId: string; settings: CampaignAiSettingsUpdate }): Promise<CampaignAiSettings>;
+  getAiSecretStatus(): Promise<AiSecretStatus>;
+  setAiApiKey(apiKey: string): Promise<AiSecretStatus>;
+  removeAiApiKey(): Promise<AiSecretStatus>;
+  testAiConnection(campaignId: string): Promise<AiProviderConnectionResult>;
+  startAiTurn(request: AiTurnRequest): Promise<{ runId: string }>;
+  cancelAiTurn(runId: string): Promise<boolean>;
+  getPendingAiProposals(campaignId: string): Promise<PendingTurnProposal[]>;
+  applyAiProposal(proposalId: string): Promise<AiProposalApplyResult>;
+  rejectAiProposal(proposalId: string): Promise<PendingTurnProposal>;
+  onAiTurnEvent(listener: (event: AiTurnClientEvent) => void): () => void;
   getSceneContext(campaignId: string): Promise<SceneContextView>;
   getChronicleToolCatalog(): Promise<ChronicleToolDescriptor[]>;
   getChronicleTrace(): Promise<ChronicleToolTraceEntry[]>;
@@ -128,4 +141,15 @@ import type {
   RuntimeWorkspaceView,
   SceneContextView,
   SceneParticipant,
+  ConversationMessage,
 } from './chronicle-engine';
+import type {
+  AiProposalApplyResult,
+  AiProviderConnectionResult,
+  AiSecretStatus,
+  AiTurnClientEvent,
+  AiTurnRequest,
+  CampaignAiSettings,
+  CampaignAiSettingsUpdate,
+  PendingTurnProposal,
+} from './ai';

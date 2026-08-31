@@ -329,6 +329,10 @@ export class ChronicleDomainService {
     return this.repository.listEvents(campaignId);
   }
 
+  getEvent(id: string): ChronicleEvent | undefined {
+    return this.repository.getEvent(id);
+  }
+
   moveCharacter(input: MoveCharacterInput): ChronicleEvent {
     return this.repository.transaction(() => {
       const character = this.requireCharacter(input.characterId);

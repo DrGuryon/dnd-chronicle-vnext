@@ -20,6 +20,7 @@ const sectionTitles: Record<CharacterPanelSectionId, string> = {
   proficiencies: 'Proficiencies',
   languages: 'Jazyky',
   effects: 'Aktivní efekty',
+  relationships: 'Vztahy',
   notes: 'Poznámky',
 };
 
@@ -214,6 +215,21 @@ export class CharacterCockpitController {
           <small>${escapeHtml(language.sourceLabel)}</small></div>
       `));
       case 'effects': return listOrEmpty(this.view.effects.map(effect));
+      case 'relationships': return listOrEmpty(this.view.relationships.map((relationship) => {
+        const otherId = relationship.sourceEntityId === this.view!.characterId
+          ? relationship.targetEntityId
+          : relationship.sourceEntityId;
+        const otherName = relationship.sourceEntityId === this.view!.characterId
+          ? relationship.targetName
+          : relationship.sourceName;
+        const otherType = relationship.sourceEntityId === this.view!.characterId
+          ? relationship.targetEntityType
+          : relationship.sourceEntityType;
+        return `<div class="relationship-row">
+          ${entityReference({ id: otherId, kind: otherType, label: otherName, subtitle: relationship.relationType, contextCharacterId: this.view!.characterId })}
+          <p>${escapeHtml(relationship.currentSummary)}</p>
+        </div>`;
+      }));
       case 'notes': return notes(this.view.notes);
     }
   }

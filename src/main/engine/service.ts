@@ -37,6 +37,7 @@ import { CharacterContextSections } from '../../shared/chronicle-engine';
 import type { EntityCardKind, EntitySummary } from '../../shared/read-models';
 import { CharacterDomainService } from '../character/service';
 import { ChronicleDomainService } from '../domain/service';
+import { ActorRelationshipService } from '../relationships/service';
 
 const DEFAULT_MAX_RESULTS = 10;
 const MAX_RESULTS = 100;
@@ -80,6 +81,7 @@ export class ChronicleEngineService {
     private readonly database: DatabaseSync,
     private readonly domain: ChronicleDomainService,
     private readonly characters: CharacterDomainService,
+    private readonly relationships: ActorRelationshipService,
   ) {
     this.tools = this.createTools();
   }
@@ -692,7 +694,12 @@ export class ChronicleEngineService {
       ? `(f.kind <> 'knowledge' OR k.visibility_scope = 'public'
           OR (k.visibility_scope = 'observer' AND k.observer_entity_id = ?))`
       : `(f.kind <> 'knowledge' OR k.visibility_scope IN ('world', 'public'))`;
+    const relationshipVisibility = input.observerEntityId
+      ? `(f.kind <> 'relationship' OR rp.visibility_scope = 'public'
+          OR (rp.visibility_scope = 'observer' AND rp.observer_entity_id = ?))`
+      : `(f.kind <> 'relationship' OR rp.visibility_scope IN ('world', 'public'))`;
     const params: Array<string | number> = [match, input.campaignId];
+    if (input.observerEntityId) params.push(input.observerEntityId);
     if (input.observerEntityId) params.push(input.observerEntityId);
     params.push(limits.maxResults * 4 + 1);
     let rows: SearchRow[];
@@ -707,7 +714,9 @@ export class ChronicleEngineService {
         LEFT JOIN entities e ON f.kind = 'entity' AND e.id = f.record_id
         LEFT JOIN events ev ON f.kind = 'event' AND ev.id = f.record_id
         LEFT JOIN knowledge_records k ON f.kind = 'knowledge' AND k.id = f.record_id
-        WHERE campaign_search_fts MATCH ? AND f.campaign_id = ? AND ${knowledgeVisibility}
+        LEFT JOIN relationship_profiles rp ON f.kind = 'relationship' AND rp.id = f.record_id
+        WHERE campaign_search_fts MATCH ? AND f.campaign_id = ?
+          AND ${knowledgeVisibility} AND ${relationshipVisibility}
         ORDER BY rank, f.rowid DESC
         LIMIT ?
       `).all(...params) as unknown as SearchRow[];
@@ -809,6 +818,11 @@ export class ChronicleEngineService {
           SELECT 'knowledge', id, campaign_id, knowledge_type,
                  coalesce(value_text, '') || ' ' || coalesce(reference_entity_id, '')
           FROM knowledge_records;
+        INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'relationship', p.id, r.campaign_id, r.relation_type,
+                 p.current_summary || ' ' || coalesce(p.history_summary, '')
+          FROM relationship_profiles p
+          JOIN entity_relations r ON r.id = p.relation_id;
       `);
     });
   }
@@ -902,6 +916,14 @@ export class ChronicleEngineService {
         entityId: character.id,
         activeOnly: true,
         budget,
+      });
+      case 'relationships': return this.relationships.getActorRelationships({
+        campaignId: character.campaignId,
+        actorId: character.id,
+        observerEntityId,
+        includeHistory: true,
+        maxResults: budget?.maxResults,
+        maxCharacters: budget?.maxCharacters,
       });
       case 'knowledge': return this.getKnowledge({
         campaignId: character.campaignId,
@@ -1036,6 +1058,16 @@ export class ChronicleEngineService {
           budget: budgetValue(input.budget),
         });
       }),
+      descriptor('chronicle.get_actor_relationships', 'Visibility-safe actor relationships with bounded history and Event references.', ['campaignId', 'actorId'], (value) => {
+        const input = record(value); return this.relationships.getActorRelationships({
+          campaignId: text(input.campaignId, 'campaignId'),
+          actorId: text(input.actorId, 'actorId'),
+          observerEntityId: optionalText(input.observerEntityId),
+          includeHistory: input.includeHistory === undefined ? true : booleanValue(input.includeHistory, 'includeHistory'),
+          maxResults: optionalNumber(input.maxResults),
+          maxCharacters: optionalNumber(input.maxCharacters),
+        });
+      }),
       descriptor('chronicle.get_knowledge', 'World or observer-scoped knowledge without visibility leakage.', ['campaignId', 'subjectEntityId'], (value) => {
         const input = record(value); return this.getKnowledge({
           campaignId: text(input.campaignId, 'campaignId'), subjectEntityId: text(input.subjectEntityId, 'subjectEntityId'),
@@ -1078,7 +1110,7 @@ function messageFromRow(row: Record<string, unknown>): ConversationMessage {
 }
 
 function entityKind(type: EntityType): EntityCardKind {
-  return type === 'Creature' ? 'Custom' : type;
+  return type;
 }
 
 function contextLimits(budget?: ContextBudget) {

@@ -211,6 +211,7 @@ describe('Milestone 5 Chronicle Engine retrieval', () => {
       'chronicle.get_location_contents',
       'chronicle.get_definition',
       'chronicle.get_relations',
+      'chronicle.get_actor_relationships',
       'chronicle.get_knowledge',
       'chronicle.get_relevant_events',
       'chronicle.resolve_entity',

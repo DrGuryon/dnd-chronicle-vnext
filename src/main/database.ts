@@ -14,6 +14,10 @@ import type { StorageInfo } from '../shared/contracts';
 import { ChronicleEngineService } from './engine/service';
 import { TurnTransactionService } from './engine/turn-transaction-service';
 import { ChronicleOrchestrator } from './engine/orchestrator';
+import { ActorRelationshipService } from './relationships/service';
+import { CampaignAiSettingsService } from './ai/settings-service';
+import { AiProposalService } from './ai/proposal-service';
+import { AiTurnRunStore } from './ai/run-store';
 
 interface VersionRow {
   user_version: number;
@@ -33,6 +37,10 @@ export class ChronicleDatabase {
   readonly engine: ChronicleEngineService;
   readonly turnTransactions: TurnTransactionService;
   readonly orchestrator: ChronicleOrchestrator;
+  readonly relationships: ActorRelationshipService;
+  readonly aiSettings: CampaignAiSettingsService;
+  readonly aiProposals: AiProposalService;
+  readonly aiRuns: AiTurnRunStore;
   private database: DatabaseSync | undefined;
 
   private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo) {
@@ -51,13 +59,18 @@ export class ChronicleDatabase {
       this.domain,
       repository,
     );
-    this.engine = new ChronicleEngineService(database, this.domain, this.characters);
+    this.relationships = new ActorRelationshipService(database);
+    this.aiSettings = new CampaignAiSettingsService(database);
+    this.engine = new ChronicleEngineService(database, this.domain, this.characters, this.relationships);
     this.turnTransactions = new TurnTransactionService(database, this.domain, this.characters);
+    this.aiProposals = new AiProposalService(database, this.turnTransactions);
+    this.aiRuns = new AiTurnRunStore(database);
     this.orchestrator = new ChronicleOrchestrator(this.engine, this.turnTransactions);
     this.readModels = new ChronicleReadModelService(
       this.domain,
       this.characters,
       this.preferences,
+      this.relationships,
       () => this.engine.getActivePlayerCharacterId(),
     );
   }

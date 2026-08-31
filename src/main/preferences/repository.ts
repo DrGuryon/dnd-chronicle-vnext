@@ -3,6 +3,7 @@ import type {
   CharacterPanelPreferences,
   CharacterPanelSectionId,
 } from '../../shared/read-models';
+import { CharacterPanelSectionIds } from '../../shared/read-models';
 
 export class SqliteUiPreferencesRepository {
   constructor(private readonly database: DatabaseSync) {}
@@ -43,11 +44,19 @@ export class SqliteUiPreferencesRepository {
 }
 
 function mapPreferences(row: Record<string, unknown>): CharacterPanelPreferences {
+  const storedOrder = JSON.parse(String(row.sectionOrder)) as CharacterPanelSectionId[];
+  const validStored = storedOrder.filter((section) => (
+    (CharacterPanelSectionIds as readonly string[]).includes(section)
+  ));
+  const missing = CharacterPanelSectionIds.filter((section) => !validStored.includes(section));
+  const storedCollapsed = JSON.parse(String(row.collapsedSections)) as CharacterPanelSectionId[];
   return {
     campaignId: String(row.campaignId),
     characterId: String(row.characterId),
-    sectionOrder: JSON.parse(String(row.sectionOrder)) as CharacterPanelSectionId[],
-    collapsedSections: JSON.parse(String(row.collapsedSections)) as CharacterPanelSectionId[],
+    sectionOrder: [...validStored, ...missing],
+    collapsedSections: storedCollapsed.filter((section) => (
+      (CharacterPanelSectionIds as readonly string[]).includes(section)
+    )),
     panelWidth: Number(row.panelWidth),
     updatedAt: String(row.updatedAt),
   };

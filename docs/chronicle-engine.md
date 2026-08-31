@@ -27,6 +27,7 @@ Messages mají jednoznačnou rostoucí `sequence` v rámci Conversation. Text zp
 | `chronicle.get_location_contents` | Filtrovaný obsah lokace | `campaignId`, `locationId` | `LocationContentsView` | No | 10 / 12k |
 | `chronicle.get_definition` | Rule Definition bez Character state | `definitionId` | `RuleDefinition` | No | single |
 | `chronicle.get_relations` | Direction/type/active relation query | `campaignId`, `entityId` | bounded Relations | No | 10 / 12k |
+| `chronicle.get_actor_relationships` | Visibility-safe Character/Creature relationships | `campaignId`, `actorId` | bounded profiles + Event refs | No | 20 / 12k |
 | `chronicle.get_knowledge` | World nebo observer view | `campaignId`, `subjectEntityId` | bounded Knowledge | No | 10 / 12k |
 | `chronicle.get_relevant_events` | Reverse-chronological filtered Events | `campaignId` | bounded Events | No | 10 / 12k |
 | `chronicle.resolve_entity` | ID/name/alias resolution + scene bias | `campaignId`, `query` | matches + ambiguity | No | 100 candidates |
@@ -67,6 +68,7 @@ Implementované TurnChange varianty:
 | `deathSave.record` | Character, success | counter below 3 | counter + history |
 | `relation.add/end` | Entity IDs / active Relation | membership + active interval | relation interval |
 | `knowledge.add/end` | subject, scope, value/reference | membership + visibility invariant | knowledge interval |
+| `actorRelationship.upsert` | Character/Creature endpoints, scope, summary | actor/type/scope/Event membership | canonical relation + profile + current Event ref |
 
 Transaction ID a canonical payload hash se uloží pouze po úspěchu. Stejné ID + stejný payload vrátí původní výsledek s `alreadyApplied: true`; stejné ID + jiný payload vrátí `TRANSACTION_ID_REUSED`. Rejected preflight nevytvoří Event, Message, history ani transaction row.
 
@@ -74,4 +76,4 @@ Transaction ID a canonical payload hash se uloží pouze po úspěchu. Stejné I
 
 `ChronicleOrchestrator` nabízí `buildTurnContext`, `executeTool`, `validateProposedTransaction` a `commitTransaction`. `ProposedTurnTransaction.reasoningSummary` je krátké bezpečné vysvětlení, ne chain-of-thought. Approval policy contract podporuje `automatic`, `review` a `manual`; výchozí foundation používá `review` a neimplikuje automatický commit.
 
-Budoucí adapter může mapovat catalog na OpenAI function/tool calling, jiného providera nebo lokální harness. V této verzi není žádná síťová ani provider-specific závislost.
+OpenAI adapter mapuje katalog na strict function tools. Jediný proposal tool je non-mutating: doplní bezpečně generovatelná ID a vrátí výsledek stejného `validateTurnTransaction()`. Během tahu se drží jen poslední platný návrh. Po finálním textu jej `review`/`manual` zobrazí a `automatic` aplikuje přes stejnou idempotentní M5 transaction boundary. Běžné testy používají provider-neutral `FakeAiProvider`.

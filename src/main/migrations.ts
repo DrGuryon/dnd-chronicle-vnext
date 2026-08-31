@@ -771,6 +771,132 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: 'create_ai_runtime_and_actor_relationships',
+    up(database) {
+      database.exec(`
+        CREATE TABLE campaign_ai_settings (
+          campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL DEFAULT 'openai' CHECK (provider = 'openai'),
+          model_id TEXT NOT NULL DEFAULT 'gpt-5.6-sol' CHECK (length(trim(model_id)) > 0),
+          reasoning_effort TEXT NOT NULL DEFAULT 'medium'
+            CHECK (reasoning_effort IN ('none', 'minimal', 'low', 'medium', 'high', 'xhigh')),
+          verbosity TEXT NOT NULL DEFAULT 'medium'
+            CHECK (verbosity IN ('low', 'medium', 'high')),
+          max_output_tokens INTEGER NOT NULL DEFAULT 4096
+            CHECK (max_output_tokens BETWEEN 256 AND 32768),
+          approval_policy TEXT NOT NULL DEFAULT 'review'
+            CHECK (approval_policy IN ('automatic', 'review', 'manual')),
+          campaign_instructions TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        ) STRICT;
+
+        INSERT INTO campaign_ai_settings(campaign_id, updated_at)
+          SELECT id, updated_at FROM campaigns;
+
+        CREATE TABLE ai_turn_runs (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          user_message_id TEXT REFERENCES conversation_messages(id) ON DELETE SET NULL,
+          assistant_message_id TEXT REFERENCES conversation_messages(id) ON DELETE SET NULL,
+          provider TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          prompt_version TEXT NOT NULL,
+          status TEXT NOT NULL
+            CHECK (status IN ('running', 'completed', 'failed', 'cancelled', 'pending_review')),
+          transaction_id TEXT,
+          provider_response_id TEXT,
+          input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+          output_tokens INTEGER NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+          reasoning_tokens INTEGER NOT NULL DEFAULT 0 CHECK (reasoning_tokens >= 0),
+          cached_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (cached_input_tokens >= 0),
+          error_code TEXT,
+          started_at TEXT NOT NULL,
+          completed_at TEXT
+        ) STRICT;
+
+        CREATE INDEX ai_turn_runs_campaign_started_idx
+          ON ai_turn_runs(campaign_id, started_at DESC);
+        CREATE INDEX ai_turn_runs_conversation_started_idx
+          ON ai_turn_runs(conversation_id, started_at DESC);
+
+        CREATE TABLE pending_turn_proposals (
+          id TEXT PRIMARY KEY,
+          turn_run_id TEXT NOT NULL UNIQUE REFERENCES ai_turn_runs(id) ON DELETE CASCADE,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          transaction_id TEXT NOT NULL UNIQUE,
+          proposal_json TEXT NOT NULL,
+          validation_json TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'applied', 'rejected', 'manual')),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          applied_event_id TEXT REFERENCES events(id)
+        ) STRICT;
+
+        CREATE INDEX pending_turn_proposals_campaign_status_idx
+          ON pending_turn_proposals(campaign_id, status, created_at DESC);
+
+        CREATE TABLE relationship_profiles (
+          id TEXT PRIMARY KEY,
+          relation_id TEXT NOT NULL REFERENCES entity_relations(id) ON DELETE CASCADE,
+          visibility_scope TEXT NOT NULL CHECK (visibility_scope IN ('world', 'public', 'observer')),
+          observer_entity_id TEXT REFERENCES entities(id) ON DELETE CASCADE,
+          current_summary TEXT NOT NULL
+            CHECK (length(trim(current_summary)) > 0 AND length(current_summary) <= 600),
+          history_summary TEXT CHECK (history_summary IS NULL OR length(history_summary) <= 3000),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          CHECK (
+            (visibility_scope = 'observer' AND observer_entity_id IS NOT NULL)
+            OR (visibility_scope <> 'observer' AND observer_entity_id IS NULL)
+          )
+        ) STRICT;
+
+        CREATE UNIQUE INDEX relationship_profiles_shared_scope_idx
+          ON relationship_profiles(relation_id, visibility_scope)
+          WHERE observer_entity_id IS NULL;
+        CREATE UNIQUE INDEX relationship_profiles_observer_scope_idx
+          ON relationship_profiles(relation_id, observer_entity_id)
+          WHERE visibility_scope = 'observer';
+        CREATE INDEX relationship_profiles_observer_idx
+          ON relationship_profiles(observer_entity_id, updated_at DESC)
+          WHERE observer_entity_id IS NOT NULL;
+
+        CREATE TABLE relationship_event_references (
+          relationship_id TEXT NOT NULL REFERENCES relationship_profiles(id) ON DELETE CASCADE,
+          event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          reference_role TEXT NOT NULL DEFAULT 'evidence' CHECK (length(trim(reference_role)) > 0),
+          note TEXT CHECK (note IS NULL OR length(note) <= 500),
+          sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+          PRIMARY KEY (relationship_id, event_id, reference_role)
+        ) STRICT;
+
+        CREATE INDEX relationship_event_references_event_idx
+          ON relationship_event_references(event_id, relationship_id);
+
+        CREATE TRIGGER campaign_search_relationship_insert AFTER INSERT ON relationship_profiles BEGIN
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'relationship', new.id, r.campaign_id, r.relation_type,
+                 new.current_summary || ' ' || coalesce(new.history_summary, '')
+          FROM entity_relations r WHERE r.id = new.relation_id;
+        END;
+        CREATE TRIGGER campaign_search_relationship_update
+        AFTER UPDATE OF current_summary, history_summary ON relationship_profiles BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'relationship' AND record_id = old.id;
+          INSERT INTO campaign_search_fts(kind, record_id, campaign_id, title, body)
+          SELECT 'relationship', new.id, r.campaign_id, r.relation_type,
+                 new.current_summary || ' ' || coalesce(new.history_summary, '')
+          FROM entity_relations r WHERE r.id = new.relation_id;
+        END;
+        CREATE TRIGGER campaign_search_relationship_delete AFTER DELETE ON relationship_profiles BEGIN
+          DELETE FROM campaign_search_fts WHERE kind = 'relationship' AND record_id = old.id;
+        END;
+      `);
+    },
+  },
 ];
 
 export const latestSchemaVersion = migrations.at(-1)?.version ?? 0;
