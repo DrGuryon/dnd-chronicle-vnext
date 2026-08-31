@@ -5,6 +5,7 @@ import type {
   CampaignAiSettings,
   CampaignAiSettingsUpdate,
 } from '../../shared/ai';
+import { normalizeAiReasoningEffort } from '../../shared/ai';
 import type { ApprovalPolicy } from '../../shared/chronicle-engine';
 import { ChronicleEngineError } from '../engine/service';
 
@@ -14,7 +15,7 @@ export class CampaignAiSettingsService {
   get(campaignId: string): CampaignAiSettings {
     this.requireCampaign(campaignId);
     this.ensureRow(campaignId);
-    return this.database.prepare(`
+    const settings = this.database.prepare(`
       SELECT campaign_id AS campaignId, provider, model_id AS modelId,
              reasoning_effort AS reasoningEffort, verbosity,
              max_output_tokens AS maxOutputTokens,
@@ -23,16 +24,20 @@ export class CampaignAiSettingsService {
              updated_at AS updatedAt
       FROM campaign_ai_settings WHERE campaign_id = ?
     `).get(campaignId) as unknown as CampaignAiSettings;
+    return {
+      ...settings,
+      reasoningEffort: normalizeAiReasoningEffort(settings.modelId, settings.reasoningEffort),
+    };
   }
 
   update(campaignId: string, update: CampaignAiSettingsUpdate): CampaignAiSettings {
     const current = this.get(campaignId);
     const modelId = normalizeText(update.modelId ?? current.modelId, 'Model ID', 120);
-    const reasoningEffort = enumValue(
+    const reasoningEffort = normalizeAiReasoningEffort(modelId, enumValue(
       update.reasoningEffort ?? current.reasoningEffort,
       ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const,
       'Reasoning effort',
-    );
+    ));
     const verbosity = enumValue(
       update.verbosity ?? current.verbosity,
       ['low', 'medium', 'high'] as const,

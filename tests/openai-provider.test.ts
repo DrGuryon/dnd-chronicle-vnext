@@ -49,6 +49,43 @@ describe('OpenAI Responses adapter', () => {
     });
     await expect(provider.testConnection('gpt-5.6-sol')).rejects.toMatchObject({ code: 'OPENAI_AUTH' });
   });
+
+  it('tests a connection without sending a model-specific reasoning value', async () => {
+    const create = vi.fn(async () => ({ id: 'resp_test' }));
+    const provider = new OpenAiProvider({ responses: { create } });
+
+    await expect(provider.testConnection('gpt-5.6-sol')).resolves.toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalledWith(expect.not.objectContaining({ reasoning: expect.anything() }), {
+      signal: undefined,
+    });
+  });
+
+  it('normalizes a legacy minimal setting to low for GPT-5.6 requests', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const provider = new OpenAiProvider({
+      responses: {
+        create: vi.fn(async (body: unknown) => {
+          requests.push(body as Record<string, unknown>);
+          return completedStream();
+        }),
+      },
+    });
+
+    for await (const _event of provider.runTurn({
+      modelId: 'gpt-5.6-sol',
+      reasoningEffort: 'minimal',
+      verbosity: 'medium',
+      maxOutputTokens: 256,
+      instructions: 'test',
+      input: [{ role: 'user', content: 'Test.' }],
+      tools: [],
+      executeTool: vi.fn(),
+    })) {
+      // Drain the provider stream.
+    }
+
+    expect(requests[0]).toMatchObject({ reasoning: { effort: 'low' } });
+  });
 });
 
 async function* firstStream() {
@@ -63,6 +100,10 @@ async function* firstStream() {
 async function* secondStream() {
   yield { type: 'response.output_text.delta', delta: 'Hex zasáhl cíl.', item_id: 'msg_1', output_index: 0, content_index: 0, logprobs: [], sequence_number: 1 };
   yield { type: 'response.completed', sequence_number: 2, response: response('resp_2', [], 7, 5) };
+}
+
+async function* completedStream() {
+  yield { type: 'response.completed', sequence_number: 1, response: response('resp_compat', [], 1, 1) };
 }
 
 function response(id: string, output: unknown[], inputTokens: number, outputTokens: number) {

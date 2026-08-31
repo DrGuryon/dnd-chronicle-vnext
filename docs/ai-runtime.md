@@ -24,6 +24,8 @@ Model nedostává SQL, generický patch ani commit tool. `chronicle.propose_turn
 
 Každá Campaign má provider, model (výchozí `gpt-5.6-sol`), reasoning effort, verbosity, max output tokens, approval policy a vlastní instrukce. `ai_turn_runs` ukládá stav, prompt version, model, časy, provider response ID a dostupné token counts. Cena se nehardcoduje, protože se může měnit.
 
+Pro modely GPT-5.6 aplikace nabízí `none`, `low`, `medium`, `high` a `xhigh`. Starší uložená hodnota `minimal` se při použití GPT-5.6 bezpečně interpretuje jako `low`; databázové schéma se kvůli tomu nemění. Test připojení neposílá modelově specifický reasoning effort.
+
 ## Testování
 
 CI nepoužívá skutečný API klíč ani placené volání. `FakeAiProvider` pokrývá stream/proposal/approval flow a OpenAI adapter má simulované Responses streamy včetně strict tools, multi-tool replay, usage a mapování chyb. Skutečné připojení spouští pouze uživatel tlačítkem **Otestovat připojení** po zadání vlastního klíče.

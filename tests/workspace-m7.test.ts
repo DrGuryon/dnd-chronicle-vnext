@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FakeAiProvider } from '../src/main/ai/fake-provider';
 import { AiTurnService } from '../src/main/ai/turn-service';
@@ -101,6 +102,25 @@ describe('Milestone 7 first-run workspace', () => {
     expect(ipc.listCampaigns()).toEqual([]);
     expect(database.domain.getCampaign(campaign.id)?.name).toBe('Ravenford Chronicle');
     database.close();
+  });
+
+  it('normalizes a previously saved minimal effort for GPT-5.6 without a schema change', async () => {
+    const opened = await openDatabase();
+    const campaign = new ChronicleIpcService(opened.database).createCampaign({
+      name: 'Ravenford', rulesetId: 'dnd5e', rulesetVersion: '2024',
+    });
+    opened.database.aiSettings.get(campaign.id);
+    opened.database.close();
+
+    const raw = new DatabaseSync(path.join(opened.directory, 'data', 'chronicle.db'));
+    raw.prepare('UPDATE campaign_ai_settings SET reasoning_effort = ? WHERE campaign_id = ?')
+      .run('minimal', campaign.id);
+    raw.close();
+
+    const reopened = await ChronicleDatabase.open(opened.directory);
+    expect(reopened.info.schemaVersion).toBe(6);
+    expect(reopened.aiSettings.get(campaign.id).reasoningEffort).toBe('low');
+    reopened.close();
   });
 });
 

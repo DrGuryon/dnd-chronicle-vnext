@@ -14,6 +14,7 @@ import type {
   AiProviderTurnInput,
   AiUsage,
 } from '../../shared/ai';
+import { normalizeAiReasoningEffort } from '../../shared/ai';
 import { ChronicleEngineError } from '../engine/service';
 import { strictToolDescriptor } from './tool-schemas';
 
@@ -58,7 +59,7 @@ export class OpenAiProvider implements AiProvider {
             parameters: tool.inputSchema,
             strict: true,
           })),
-          reasoning: { effort: input.reasoningEffort },
+          reasoning: { effort: normalizeAiReasoningEffort(input.modelId, input.reasoningEffort) },
           text: { verbosity: input.verbosity },
           max_output_tokens: input.maxOutputTokens,
           parallel_tool_calls: false,
@@ -133,7 +134,6 @@ export class OpenAiProvider implements AiProvider {
         model: modelId,
         input: 'Reply with OK.',
         max_output_tokens: 64,
-        reasoning: { effort: 'minimal' },
         store: false,
       }, { signal });
       return { ok: true, modelId, message: 'Připojení k OpenAI funguje.' };

@@ -5,6 +5,24 @@ export type AiProviderId = 'openai' | 'fake';
 export type AiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 export type AiVerbosity = 'low' | 'medium' | 'high';
 
+const standardReasoningEfforts = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+const gpt56ReasoningEfforts = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
+
+export function normalizeAiReasoningEffort(
+  modelId: string,
+  effort: AiReasoningEffort,
+): AiReasoningEffort {
+  return isGpt56Model(modelId) && effort === 'minimal' ? 'low' : effort;
+}
+
+export function aiReasoningEffortsForModel(modelId: string): readonly AiReasoningEffort[] {
+  return isGpt56Model(modelId) ? gpt56ReasoningEfforts : standardReasoningEfforts;
+}
+
+function isGpt56Model(modelId: string): boolean {
+  return /^gpt-5\.6(?:-|$)/i.test(modelId.trim());
+}
+
 export interface CampaignAiSettings {
   campaignId: string;
   provider: 'openai';

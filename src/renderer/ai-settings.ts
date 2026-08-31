@@ -1,5 +1,6 @@
 import type { BootstrapInfo, UpdateState } from '../shared/contracts';
 import type { AiSecretStatus, CampaignAiSettings } from '../shared/ai';
+import { aiReasoningEffortsForModel, normalizeAiReasoningEffort } from '../shared/ai';
 import type { RuntimeWorkspaceCampaign } from '../shared/chronicle-engine';
 import { errorMessage, escapeHtml, humanize } from './html';
 import { updateCard } from './views/overview';
@@ -132,10 +133,11 @@ export class AiSettingsController {
 }
 
 function campaignForm(settings: CampaignAiSettings): string {
+  const reasoningEffort = normalizeAiReasoningEffort(settings.modelId, settings.reasoningEffort);
   return `<form data-campaign-ai-form class="settings-form"><label>Model
     <input name="modelId" value="${escapeHtml(settings.modelId)}" maxlength="120" required></label>
     <div class="settings-grid">
-      ${selectField('reasoningEffort', 'Reasoning', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'], settings.reasoningEffort)}
+      ${selectField('reasoningEffort', 'Reasoning', [...aiReasoningEffortsForModel(settings.modelId)], reasoningEffort)}
       ${selectField('verbosity', 'Podrobnost', ['low', 'medium', 'high'], settings.verbosity)}
       ${selectField('approvalPolicy', 'Schvalování změn', ['review', 'automatic', 'manual'], settings.approvalPolicy)}
       <label>Max. výstupních tokenů<input type="number" name="maxOutputTokens" min="256" max="32768" value="${settings.maxOutputTokens}" required></label>

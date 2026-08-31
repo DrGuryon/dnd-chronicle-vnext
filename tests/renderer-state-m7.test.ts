@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RuntimeWorkspaceCampaign } from '../src/shared/chronicle-engine';
 import { playPrerequisite, resolveStartupRoute } from '../src/renderer/router';
 import { RendererUiStateStore, type StorageLike } from '../src/renderer/ui-state';
+import { aiReasoningEffortsForModel, normalizeAiReasoningEffort } from '../src/shared/ai';
 
 describe('Milestone 7 renderer state', () => {
   it('routes all first-run prerequisites and restores the last campaign', () => {
@@ -34,6 +35,13 @@ describe('Milestone 7 renderer state', () => {
       readFile('src/renderer/character-cockpit.ts', 'utf8'),
     ]);
     expect(sources.join('\n')).not.toMatch(/window\.(prompt|confirm)\s*\(/);
+  });
+
+  it('offers only GPT-5.6-compatible reasoning values while preserving legacy models', () => {
+    expect(aiReasoningEffortsForModel('gpt-5.6-sol')).not.toContain('minimal');
+    expect(normalizeAiReasoningEffort('gpt-5.6-sol', 'minimal')).toBe('low');
+    expect(aiReasoningEffortsForModel('gpt-5')).toContain('minimal');
+    expect(normalizeAiReasoningEffort('gpt-5', 'minimal')).toBe('minimal');
   });
 });
 
