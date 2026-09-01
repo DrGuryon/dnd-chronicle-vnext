@@ -20,7 +20,7 @@ describe('ChronicleDatabase', () => {
     const chronicle = await ChronicleDatabase.open(userData);
 
     expect(chronicle.path).toBe(path.join(userData, 'data', 'chronicle.db'));
-    expect(chronicle.info.schemaVersion).toBe(7);
+    expect(chronicle.info.schemaVersion).toBe(8);
     expect(chronicle.info.campaignCount).toBe(0);
     chronicle.close();
   });
@@ -37,7 +37,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const reopened = await ChronicleDatabase.open(userData);
-    expect(reopened.info.schemaVersion).toBe(7);
+    expect(reopened.info.schemaVersion).toBe(8);
     expect(reopened.info.campaignCount).toBe(1);
     expect(reopened.info.backupCreated).toBeUndefined();
     reopened.close();
@@ -75,7 +75,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(7);
+    expect(migrated.info.schemaVersion).toBe(8);
     expect(migrated.info.campaignCount).toBe(1);
     expect(migrated.info.backupCreated).toBeDefined();
     expect((await stat(migrated.info.backupCreated!)).size).toBeGreaterThan(0);
@@ -117,7 +117,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(7);
+    expect(migrated.info.schemaVersion).toBe(8);
     expect(migrated.info.backupCreated).toBeDefined();
     expect(migrated.domain.getCampaign('campaign-v2')?.name).toBe('Version two');
     expect(migrated.characters.listDefinitions()).toEqual([]);
@@ -157,7 +157,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(7);
+    expect(migrated.info.schemaVersion).toBe(8);
     expect(migrated.info.backupCreated).toBeDefined();
     migrated.close();
 
@@ -203,7 +203,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(7);
+    expect(migrated.info.schemaVersion).toBe(8);
     expect(migrated.info.backupCreated).toBeDefined();
     expect(migrated.engine.getCampaignRuntimeState('campaign-v4')).toMatchObject({
       campaignId: 'campaign-v4',
@@ -254,7 +254,7 @@ describe('ChronicleDatabase', () => {
     database.close();
 
     const migrated = await ChronicleDatabase.open(userData);
-    expect(migrated.info.schemaVersion).toBe(7);
+    expect(migrated.info.schemaVersion).toBe(8);
     expect(migrated.info.backupCreated).toBeDefined();
     expect(migrated.domain.getCampaign('campaign-v5')?.name).toBe('Version five');
     expect(migrated.aiSettings.get('campaign-v5')).toMatchObject({
@@ -311,7 +311,7 @@ describe('ChronicleDatabase', () => {
 
     const migrated = await ChronicleDatabase.open(userData);
     try {
-      expect(migrated.info.schemaVersion).toBe(7);
+      expect(migrated.info.schemaVersion).toBe(8);
       expect(migrated.info.backupCreated).toBeDefined();
       expect(migrated.domain.getCampaign('campaign-v6')?.name).toBe('Version six');
       expect(migrated.aiSettings.get('campaign-v6')).toMatchObject({

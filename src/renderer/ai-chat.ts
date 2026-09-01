@@ -2,11 +2,13 @@ import type { PendingAiProposal, AiTurnClientEvent, PendingTurnProposal } from '
 import type { DataChange } from '../shared/editable-domain';
 import type { ConversationMessage, RuntimeWorkspaceCampaign } from '../shared/chronicle-engine';
 import { errorMessage, escapeHtml, humanize } from './html';
+import type { ToastType } from './toast-service';
 
 export interface AiChatActions {
   openSettings(): void;
   createCharacter(): void;
   createConversation(): void;
+  notify?(message: string, type?: ToastType): void;
 }
 
 export class AiChatController {
@@ -26,6 +28,8 @@ export class AiChatController {
   private error = '';
   private userNearBottom = true;
   private newMessagesPending = false;
+  private composerDraft = '';
+  private composing = false;
 
   constructor(
     private readonly root: HTMLElement,
@@ -34,6 +38,14 @@ export class AiChatController {
     root.addEventListener('submit', (event) => void this.onSubmit(event));
     root.addEventListener('click', (event) => void this.onClick(event));
     root.addEventListener('scroll', (event) => this.onScroll(event), true);
+    root.addEventListener('keydown', (event) => this.onKeyDown(event));
+    root.addEventListener('input', (event) => this.onComposerInput(event));
+    root.addEventListener('compositionstart', (event) => {
+      if ((event.target as HTMLElement).matches('textarea[name="message"]')) this.composing = true;
+    });
+    root.addEventListener('compositionend', (event) => {
+      if ((event.target as HTMLElement).matches('textarea[name="message"]')) this.composing = false;
+    });
     window.chronicle.onAiTurnEvent((event) => void this.onTurnEvent(event));
     this.render();
   }
@@ -106,10 +118,13 @@ export class AiChatController {
       </div></section>` : ''}
       ${prerequisite ? prerequisiteAction(prerequisite) : ''}
       <form class="chat-composer">
-        <textarea name="message" rows="2" maxlength="20000" placeholder="Co vaše postava udělá?" ${prerequisite || this.runId || this.starting ? 'disabled' : ''}></textarea>
+        <textarea name="message" rows="1" maxlength="20000" placeholder="Co vaše postava udělá?" ${prerequisite || this.runId || this.starting ? 'disabled' : ''}>${escapeHtml(this.composerDraft)}</textarea>
         ${this.runId ? '<button type="button" data-chat-action="cancel">Zastavit</button>' : `<button type="submit" ${prerequisite || this.starting ? 'disabled' : ''}>Odeslat</button>`}
       </form>`;
-    if (this.userNearBottom) requestAnimationFrame(() => this.scrollToBottom());
+    requestAnimationFrame(() => {
+      this.resizeComposer();
+      if (this.userNearBottom) this.scrollToBottom();
+    });
   }
 
   private async onSubmit(event: SubmitEvent): Promise<void> {
@@ -120,6 +135,7 @@ export class AiChatController {
     const content = textarea.value.trim();
     if (!content) return;
     textarea.value = '';
+    this.composerDraft = '';
     await this.startTurn(content, null, true);
   }
 
@@ -156,11 +172,18 @@ export class AiChatController {
     if (!proposalId) return;
     button.disabled = true;
     try {
-      if (action === 'apply') await window.chronicle.applyAiProposal(proposalId);
-      if (action === 'reject') await window.chronicle.rejectAiProposal(proposalId);
+      if (action === 'apply') {
+        await window.chronicle.applyAiProposal(proposalId);
+        this.actions.notify?.('Navržené změny byly použity.', 'success');
+      }
+      if (action === 'reject') {
+        await window.chronicle.rejectAiProposal(proposalId);
+        this.actions.notify?.('Navržené změny byly zamítnuty.', 'info');
+      }
       await this.reloadCurrent();
     } catch (error) {
       this.error = errorMessage(error);
+      this.actions.notify?.(this.error, 'error');
       this.render();
     }
   }
@@ -195,6 +218,7 @@ export class AiChatController {
       this.activeTurnContent = null;
       this.draftAssistant = '';
       this.toolStatus = '';
+      this.actions.notify?.(event.message, 'error');
       await this.reloadCurrent(true);
       return;
     }
@@ -222,6 +246,33 @@ export class AiChatController {
     }
   }
 
+  private onKeyDown(event: KeyboardEvent): void {
+    const textarea = (event.target as HTMLElement).closest<HTMLTextAreaElement>('textarea[name="message"]');
+    if (!textarea || event.key !== 'Enter' || event.shiftKey || event.isComposing || this.composing || event.keyCode === 229) return;
+    event.preventDefault();
+    textarea.form?.requestSubmit();
+  }
+
+  private onComposerInput(event: Event): void {
+    const textarea = (event.target as HTMLElement).closest<HTMLTextAreaElement>('textarea[name="message"]');
+    if (!textarea) return;
+    this.composerDraft = textarea.value;
+    this.resizeComposer(textarea);
+  }
+
+  private resizeComposer(element?: HTMLTextAreaElement): void {
+    const textarea = element ?? this.root.querySelector<HTMLTextAreaElement>('textarea[name="message"]');
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const style = getComputedStyle(textarea);
+    const lineHeight = Number.parseFloat(style.lineHeight) || 19;
+    const vertical = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom)
+      + Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth);
+    const maximum = lineHeight * 8 + vertical;
+    textarea.style.height = `${Math.min(maximum, Math.max(lineHeight + vertical, textarea.scrollHeight))}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maximum ? 'auto' : 'hidden';
+  }
+
   private scrollToBottom(): void {
     const scroll = this.root.querySelector<HTMLElement>('[data-chat-scroll]');
     if (scroll) scroll.scrollTop = scroll.scrollHeight;
@@ -244,6 +295,7 @@ export class AiChatController {
     this.draftAssistant = '';
     this.toolStatus = 'Chronicle přemýšlí…';
     this.activeTurnContent = content;
+    this.composerDraft = '';
     this.starting = true;
     this.userNearBottom = true;
     if (optimisticMessage) {

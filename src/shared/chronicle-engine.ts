@@ -219,6 +219,8 @@ export interface ChronicleToolDescriptor {
   description: string;
   inputSchema: Readonly<Record<string, unknown>>;
   mutatesState: false;
+  kind: 'read' | 'proposal';
+  cacheable: boolean;
   defaultLimits: { maxResults: number; maxCharacters: number };
 }
 

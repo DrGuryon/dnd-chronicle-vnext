@@ -1115,6 +1115,8 @@ export class ChronicleEngineService {
         properties: Object.fromEntries(required.map((key) => [key, { type: 'string' }])),
       },
       mutatesState: false,
+      kind: 'read',
+      cacheable: true,
       defaultLimits: { maxResults: DEFAULT_MAX_RESULTS, maxCharacters: DEFAULT_MAX_CHARACTERS },
       execute,
     });

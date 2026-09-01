@@ -164,6 +164,11 @@ export interface ChronicleApi {
   getRuleReconciliationSuggestions(command: { campaignId: string; characterId?: string }): Promise<RuleReconciliationSuggestion[]>;
   applyRuleReconciliation(suggestion: RuleReconciliationSuggestion): Promise<DataChangeTransactionResult>;
   getDataChangeAudit(campaignId: string): Promise<DataChangeAuditTransaction[]>;
+  queryAppLog(query?: AppLogQuery): Promise<AppLogPage>;
+  clearAppLog(): Promise<number>;
+  exportAppLog(request: { format: AppLogExportFormat; query?: AppLogQuery }): Promise<string | null>;
+  listRulesPacks(): Promise<RulesPackStatus[]>;
+  updateRulesPacks(packId?: string): Promise<RulesPackUpdateResult[]>;
   getAiSettings(campaignId: string): Promise<CampaignAiSettings>;
   saveAiSettings(command: { campaignId: string; settings: CampaignAiSettingsUpdate }): Promise<CampaignAiSettings>;
   getAiSecretStatus(): Promise<AiSecretStatus>;
@@ -225,3 +230,5 @@ import type {
   RuleCatalogResult,
   RuleReconciliationSuggestion,
 } from './editable-domain';
+import type { AppLogExportFormat, AppLogPage, AppLogQuery } from './app-log';
+import type { RulesPackStatus, RulesPackUpdateResult } from './rules-packs';

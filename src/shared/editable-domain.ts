@@ -22,6 +22,7 @@ export interface RuleCatalogQuery {
   query?: string | null;
   includeBuiltIn?: boolean;
   includeHomebrew?: boolean;
+  parentDefinitionId?: string | null;
   limit?: number;
 }
 
@@ -39,6 +40,7 @@ export interface HomebrewDefinitionInput {
   name: string;
   description?: string;
   aliases?: readonly string[];
+  parentDefinitionId?: string | null;
 }
 
 export interface RuleReconciliationSuggestion {
@@ -190,6 +192,7 @@ export type DataChange =
     name: string;
     description: string;
     aliases: readonly string[];
+    parentDefinitionId?: string | null;
   }
   | {
     type: 'ruleDefinition.homebrew.update';

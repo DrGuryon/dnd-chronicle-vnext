@@ -14,7 +14,7 @@ SQLite je lokální source of truth. Soubor je v `app.getPath('userData')/data/c
 
 Schéma používá monotónní `PRAGMA user_version` a auditní tabulku `schema_migrations`. Migrace běží v `BEGIN IMMEDIATE` transakci. Aplikace odmítne otevřít databázi s novějším schématem, aby downgrade nepoškodil data. Před každým skutečným upgradem existující databáze vytvoří SQLite backup do `userData/backups`.
 
-Schéma v3 rozšířilo storage o praktický Character model, v4 přidalo izolované UI preference a v5 Chronicle Engine, Conversations, Knowledge visibility, Turn Transactions a FTS5. Schéma v6 přidalo `campaign_ai_settings`, auditní `ai_turn_runs`, pending proposals a actor relationship profiles s Event referencemi. Schéma v7 doplňuje verzovaný ruleset registr, vestavěný katalog pravidel, revize entit, atomické DataChange transakce, audit změn, AI návrhy datových změn a explicitní reconciliaci homebrew referencí. Databáze v1–v6 postupují stejným monotónním runnerem do v7 a před upgradem vždy vznikne konzistentní backup.
+Schéma v3 rozšířilo storage o praktický Character model, v4 přidalo izolované UI preference a v5 Chronicle Engine, Conversations, Knowledge visibility, Turn Transactions a FTS5. Schéma v6 přidalo AI runtime a vztahové profily, v7 editovatelný doménový katalog. Schéma v8 doplňuje `rule_definition_relations`, verzované instalace rules packů, sanitizovaný `app_log_entries` a `tool_usage_json` u AI tahů. Databáze v1–v7 postupují stejným monotónním runnerem do v8 a před upgradem vždy vznikne konzistentní backup.
 
 ## Chronicle Engine boundary
 
@@ -136,6 +136,8 @@ UI nesmí skládat SQL ani měnit několik tabulek postupně. Preload příkazy 
 `electron-builder` vytváří standardní per-user NSIS installer. GitHub release workflow při tagu sestaví installer, blockmap a `latest.yml`; `electron-updater` čte release konfiguraci vloženou do `app-update.yml`.
 
 Updater je řízen main procesem a renderer dostává pouze stavové události. Před ukončením procesu se provede WAL checkpoint a uzavře SQLite connection. `quitAndInstall(false, true)` následně spustí NSIS update a znovu otevře aplikaci.
+
+Rules pack updater je samostatný. Pack JSON se ukládá do `userData/rules-packs/<packId>/<version>/pack.json`; aktivace metadat a normalizovaných definic proběhne v jedné databázové transakci až po validaci hash, schématu, unikátních ID a všech vztahových referencí. Poškozený aktivní soubor se při startu nahradí vestavěnou ověřenou kopií a událost se zapíše do aplikačního logu.
 
 Produkční vydání musí být Authenticode podepsané. Build konfigurace zapne kontrolu podpisu, pokud je přítomen signing certifikát; lokální unsigned build používá SHA-512 integritu metadat, ale není určený k veřejné distribuci.
 

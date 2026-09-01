@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { seedBuiltInRuleDefinitions } from '../rules/builtin-catalog';
+import { seedBuiltInRuleDefinitions, seedBuiltInRuleRelations } from '../rules/builtin-catalog';
 
 export interface Migration {
   version: number;
@@ -1011,6 +1011,85 @@ export const migrations: readonly Migration[] = [
           SELECT RAISE(ABORT, 'Vestavěnou definici nelze odstranit.');
         END;
       `);
+    },
+  },
+  {
+    version: 8,
+    name: 'create_rules_packs_relations_app_log_and_ai_telemetry',
+    up(database) {
+      database.exec(`
+        CREATE TABLE rule_definition_relations (
+          source_definition_id TEXT NOT NULL REFERENCES rule_definitions(id) ON DELETE CASCADE,
+          target_definition_id TEXT NOT NULL REFERENCES rule_definitions(id) ON DELETE CASCADE,
+          relation_type TEXT NOT NULL CHECK (relation_type IN (
+            'belongsToSpecies', 'belongsToRace', 'belongsToClass',
+            'requiresDefinition', 'compatibleWith', 'incompatibleWith'
+          )),
+          metadata TEXT,
+          PRIMARY KEY (source_definition_id, target_definition_id, relation_type),
+          CHECK (source_definition_id <> target_definition_id)
+        ) STRICT;
+        CREATE INDEX rule_definition_relations_target_idx
+          ON rule_definition_relations(target_definition_id, relation_type);
+
+        CREATE TABLE rules_pack_installations (
+          pack_id TEXT NOT NULL,
+          version TEXT NOT NULL,
+          schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+          ruleset_id TEXT NOT NULL,
+          ruleset_version TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          license TEXT NOT NULL,
+          attribution TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          source_url TEXT NOT NULL,
+          update_url TEXT NOT NULL,
+          published_at TEXT NOT NULL,
+          installed_at TEXT NOT NULL,
+          activated_at TEXT,
+          active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
+          previous_version TEXT,
+          PRIMARY KEY (pack_id, version)
+        ) STRICT;
+        CREATE UNIQUE INDEX rules_pack_installations_active_ruleset_idx
+          ON rules_pack_installations(ruleset_id, ruleset_version) WHERE active = 1;
+
+        CREATE TABLE app_log_entries (
+          id INTEGER PRIMARY KEY,
+          created_at TEXT NOT NULL,
+          severity TEXT NOT NULL CHECK (severity IN ('info', 'success', 'warning', 'error')),
+          category TEXT NOT NULL CHECK (category IN ('application', 'ai', 'updater', 'rules-pack', 'data')),
+          campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+          event TEXT NOT NULL CHECK (length(trim(event)) > 0),
+          message TEXT NOT NULL CHECK (length(trim(message)) > 0),
+          details_json TEXT
+        ) STRICT;
+        CREATE INDEX app_log_entries_created_idx ON app_log_entries(created_at DESC);
+        CREATE INDEX app_log_entries_filter_idx
+          ON app_log_entries(severity, category, campaign_id, created_at DESC);
+
+        ALTER TABLE ai_turn_runs ADD COLUMN tool_usage_json TEXT;
+
+        CREATE TABLE rules_pack_update_guard (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
+        ) STRICT;
+        INSERT INTO rules_pack_update_guard(id, enabled) VALUES (1, 0);
+
+        DROP TRIGGER rule_definitions_builtin_update;
+        DROP TRIGGER rule_definitions_builtin_delete;
+        CREATE TRIGGER rule_definitions_builtin_update
+        BEFORE UPDATE ON rule_definitions
+        WHEN old.is_builtin = 1 AND (SELECT enabled FROM rules_pack_update_guard WHERE id = 1) = 0 BEGIN
+          SELECT RAISE(ABORT, 'Vestavěnou definici nelze upravit.');
+        END;
+        CREATE TRIGGER rule_definitions_builtin_delete
+        BEFORE DELETE ON rule_definitions
+        WHEN old.is_builtin = 1 AND (SELECT enabled FROM rules_pack_update_guard WHERE id = 1) = 0 BEGIN
+          SELECT RAISE(ABORT, 'Vestavěnou definici nelze odstranit.');
+        END;
+      `);
+      seedBuiltInRuleRelations(database);
     },
   },
 ];

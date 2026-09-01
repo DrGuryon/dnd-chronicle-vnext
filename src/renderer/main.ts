@@ -4,6 +4,7 @@ import type { CampaignLibraryView, RuntimeWorkspaceCampaign } from '../shared/ch
 import type { DefinitionCardView } from '../shared/read-models';
 import { AiChatController } from './ai-chat';
 import { AiSettingsController } from './ai-settings';
+import { AppLogController } from './app-log-controller';
 import { CharacterCockpitController } from './character-cockpit';
 import { CharacterEditorDialog } from './character-editor-dialog';
 import { FormDialog } from './dialogs/form-dialog';
@@ -15,6 +16,7 @@ import { renderCampaigns } from './views/campaigns';
 import { renderLibrary } from './views/library';
 import { renderOverview, updateHeading } from './views/overview';
 import { renderPlayChrome } from './views/play';
+import { ToastService } from './toast-service';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 if (!appRoot) throw new Error('Kořen aplikace nebyl nalezen.');
@@ -24,7 +26,7 @@ appRoot.innerHTML = `<div class="app-shell" data-app-shell>
     <div class="sidebar-scroll"><div class="brand-mark" aria-hidden="true">D20</div>
       <div class="brand-copy"><span>D&amp;D</span><strong>Chronicle</strong></div>
       <nav>${navButton('overview', '⌂', 'Přehled')}${navButton('campaigns', '◇', 'Kampaně')}
-        ${navButton('play', '▶', 'Hrát')}${navButton('library', '⌁', 'Knihovna')}${navButton('settings', '⚙', 'Nastavení')}</nav>
+        ${navButton('play', '▶', 'Hrát')}${navButton('library', '⌁', 'Knihovna')}${navButton('log', '≡', 'Log')}${navButton('settings', '⚙', 'Nastavení')}</nav>
     </div>
     <div class="sidebar-foot"><span class="status-dot"></span><span>Lokální režim</span></div>
   </aside>
@@ -35,6 +37,7 @@ appRoot.innerHTML = `<div class="app-shell" data-app-shell>
       <div data-play-chrome></div><section class="ai-chat" data-ai-chat aria-label="Chronicle Chat"></section>
     </section>
     <section class="app-view" data-view-panel="library" hidden></section>
+    <section class="app-view" data-view-panel="log" hidden></section>
     <section class="app-view" data-view-panel="settings" hidden></section>
   </main>
   <aside class="cockpit-panel" data-cockpit-panel aria-label="Character Cockpit">
@@ -45,7 +48,7 @@ appRoot.innerHTML = `<div class="app-shell" data-app-shell>
   <button type="button" class="cockpit-restore" data-action="show-cockpit" aria-label="Zobrazit Character Cockpit">◫ Postava</button>
   <dialog class="entity-card-dialog" data-entity-card-dialog aria-label="Detail entity"></dialog>
   <dialog class="form-dialog" data-form-dialog aria-label="Formulář"></dialog>
-  <div class="app-toast" data-app-toast role="status" hidden></div>
+  <div class="toast-host" data-toast-host aria-label="Oznámení"></div>
 </div>`;
 
 const shell = requireElement<HTMLElement>('[data-app-shell]');
@@ -53,12 +56,19 @@ const overviewRoot = requireElement<HTMLElement>('[data-view-panel="overview"]')
 const campaignsRoot = requireElement<HTMLElement>('[data-view-panel="campaigns"]');
 const playChromeRoot = requireElement<HTMLElement>('[data-play-chrome]');
 const libraryRoot = requireElement<HTMLElement>('[data-view-panel="library"]');
+const logRoot = requireElement<HTMLElement>('[data-view-panel="log"]');
 const settingsRoot = requireElement<HTMLElement>('[data-view-panel="settings"]');
 const cockpitPanel = requireElement<HTMLElement>('[data-cockpit-panel]');
 const cockpitRestore = requireElement<HTMLButtonElement>('[data-action="show-cockpit"]');
 const formDialog = new FormDialog(requireElement<HTMLDialogElement>('[data-form-dialog]'));
 const characterEditor = new CharacterEditorDialog(requireElement<HTMLDialogElement>('[data-form-dialog]'));
 const uiStore = new RendererUiStateStore(window.localStorage);
+const toasts = new ToastService(requireElement<HTMLElement>('[data-toast-host]'));
+const appLog = new AppLogController(
+  logRoot,
+  (title, description, submitLabel) => formDialog.confirm(title, description, submitLabel),
+  (message, type) => toasts.show(message, type),
+);
 let uiState: PersistedUiState = uiStore.load();
 let info: BootstrapInfo;
 let updateState: UpdateState;
@@ -81,8 +91,9 @@ const aiChat = new AiChatController(requireElement<HTMLElement>('[data-ai-chat]'
   openSettings: () => void navigate('settings'),
   createCharacter: () => void createCharacter(),
   createConversation: () => void createConversation(),
+  notify: (message, type) => toasts.show(message, type),
 });
-const settings = new AiSettingsController(settingsRoot);
+const settings = new AiSettingsController(settingsRoot, (message, type) => toasts.show(message, type));
 new EntityCardHost(requireElement<HTMLDialogElement>('[data-entity-card-dialog]'), {
   editCharacter: (characterId) => void editCharacterById(characterId),
   editHomebrewDefinition: (definition) => void editHomebrewDefinition(definition),
@@ -126,6 +137,7 @@ async function renderAll(): Promise<void> {
   await aiChat.load(campaign);
   await cockpit.load(campaign?.runtime.activePlayerCharacterId ?? undefined);
   if (activeView === 'library') await loadLibrary();
+  if (activeView === 'log') await appLog.load(campaigns);
   else renderLibrary(libraryRoot, campaigns, campaign, library, libraryQuery);
   if (activeView === 'settings') await settings.load(campaigns, activeCampaignId, info, updateState);
   updateCockpitVisibility();
@@ -144,6 +156,7 @@ async function navigate(view: AppView): Promise<void> {
   if (view === 'play' && !activeCampaignId && campaigns.length) activeCampaignId = campaigns[0].id;
   renderNavigation();
   if (view === 'library') await loadLibrary();
+  if (view === 'log') await appLog.load(campaigns);
   if (view === 'settings') await settings.load(campaigns, activeCampaignId, info, updateState);
   updateCockpitVisibility();
   persistUiState();
@@ -476,11 +489,7 @@ function persistUiState(): void {
 function isNarrow(): boolean { return window.matchMedia('(max-width: 1100px)').matches; }
 
 function showToast(message: string, error = false): void {
-  const toast = requireElement<HTMLElement>('[data-app-toast]');
-  toast.textContent = message;
-  toast.hidden = false;
-  toast.classList.toggle('is-error', error);
-  window.setTimeout(() => { toast.hidden = true; }, 6000);
+  toasts.show(message, error ? 'error' : 'success');
 }
 
 function navButton(view: AppView, icon: string, label: string): string {

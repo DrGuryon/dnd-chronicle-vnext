@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { AiUsage } from '../../shared/ai';
+import type { AiUsage, ToolUsageSummary } from '../../shared/ai';
 
 export interface AiTurnRunStart {
   id: string;
@@ -40,12 +40,13 @@ export class AiTurnRunStore {
     providerResponseId: string | null;
     transactionId: string | null;
     usage: AiUsage;
+    toolUsage: ToolUsageSummary;
   }): void {
     this.database.prepare(`
       UPDATE ai_turn_runs SET
         assistant_message_id = ?, status = ?, transaction_id = ?,
         provider_response_id = ?, input_tokens = ?, output_tokens = ?,
-        reasoning_tokens = ?, cached_input_tokens = ?, completed_at = ?
+        reasoning_tokens = ?, cached_input_tokens = ?, tool_usage_json = ?, completed_at = ?
       WHERE id = ?
     `).run(
       input.assistantMessageId,
@@ -56,6 +57,7 @@ export class AiTurnRunStore {
       input.usage.outputTokens,
       input.usage.reasoningTokens,
       input.usage.cachedInputTokens,
+      JSON.stringify(input.toolUsage),
       timestamp(),
       input.id,
     );

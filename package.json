@@ -1,6 +1,6 @@
 {
   "name": "dnd-chronicle-vnext",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "A clean foundation for the next generation of D&D Chronicle.",
   "main": "dist/main/main.js",
   "author": "D&D Chronicle",
@@ -11,10 +11,12 @@
   },
   "scripts": {
     "clean": "node scripts/clean.mjs",
+    "generate:rules-packs": "node scripts/generate-rules-packs.mjs",
+    "check:rules-packs": "node scripts/generate-rules-packs.mjs --check",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "build": "npm run clean && tsc -p tsconfig.main.json && vite build",
-    "verify": "npm run typecheck && npm run test && npm run build",
+    "verify": "npm run check:rules-packs && npm run typecheck && npm run test && npm run build",
     "start": "npm run build && electron .",
     "dist:win": "npm run verify && electron-builder --config electron-builder.config.cjs --win nsis --x64",
     "dist:win:publish": "npm run verify && electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish always"

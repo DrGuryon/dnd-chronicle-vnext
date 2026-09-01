@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DefinitionType } from '../domain/character-models';
+import type { RuleDefinitionRelation } from '../shared/rules-packs';
 import { listBuiltInRulesets } from './registry';
 
 export interface BuiltInRuleDefinition {
@@ -46,6 +47,7 @@ const commonEntries: readonly CatalogEntry[] = [
   ['Subclass', 'champion', 'Champion', ['Šampion']],
   ['Subclass', 'life-domain', 'Life Domain', ['Doména života']],
   ['Subclass', 'school-of-evocation', 'School of Evocation', ['Škola zaklínání']],
+  ['Subclass', 'oath-of-devotion', 'Oath of Devotion', ['Přísaha oddanosti']],
   ['Background', 'acolyte', 'Acolyte', ['Akolyta']],
   ['Background', 'criminal', 'Criminal', ['Zločinec']],
   ['Background', 'sage', 'Sage', ['Mudrc']],
@@ -169,4 +171,38 @@ export function seedBuiltInRuleDefinitions(database: DatabaseSync): void {
       definition.locale,
     );
   }
+}
+
+export function builtInRuleRelations(): RuleDefinitionRelation[] {
+  const pairs = [
+    ['Lineage', 'hill-dwarf', 'Species', 'dwarf', 'belongsToSpecies'],
+    ['Lineage', 'high-elf', 'Species', 'elf', 'belongsToSpecies'],
+    ['Lineage', 'lightfoot-halfling', 'Species', 'halfling', 'belongsToSpecies'],
+    ['Subclass', 'champion', 'Class', 'fighter', 'belongsToClass'],
+    ['Subclass', 'life-domain', 'Class', 'cleric', 'belongsToClass'],
+    ['Subclass', 'school-of-evocation', 'Class', 'wizard', 'belongsToClass'],
+    ['Subclass', 'oath-of-devotion', 'Class', 'paladin', 'belongsToClass'],
+  ] as const;
+  return listBuiltInRulesets().flatMap((ruleset) => ruleset.versions.flatMap((version) => pairs.map(([
+    sourceType, sourceSlug, targetType, targetSlug, relationType,
+  ]) => ({
+    sourceDefinitionId: definitionId(ruleset.id, version.id, sourceType, sourceSlug),
+    targetDefinitionId: definitionId(ruleset.id, version.id, targetType, targetSlug),
+    relationType,
+  }))));
+}
+
+export function seedBuiltInRuleRelations(database: DatabaseSync): void {
+  const insert = database.prepare(`
+    INSERT OR IGNORE INTO rule_definition_relations(
+      source_definition_id, target_definition_id, relation_type
+    ) VALUES (?, ?, ?)
+  `);
+  for (const relation of builtInRuleRelations()) {
+    insert.run(relation.sourceDefinitionId, relation.targetDefinitionId, relation.relationType);
+  }
+}
+
+function definitionId(rulesetId: string, rulesetVersion: string, type: DefinitionType, slug: string): string {
+  return `def_${rulesetId}_${rulesetVersion}_${type.toLocaleLowerCase('en-US')}_${slug.replaceAll('-', '_')}`;
 }

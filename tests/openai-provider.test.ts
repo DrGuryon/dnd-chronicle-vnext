@@ -34,7 +34,7 @@ describe('OpenAI Responses adapter', () => {
       reasoning: { effort: 'medium' },
       text: { verbosity: 'medium' },
       max_output_tokens: 2048,
-      parallel_tool_calls: false,
+      parallel_tool_calls: true,
       store: false,
       stream: true,
     });

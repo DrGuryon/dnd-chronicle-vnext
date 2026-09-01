@@ -8,9 +8,12 @@ Milestone 7 používá jediný renderer bez frameworkového routeru. Přepnutí 
 - **Kampaně** – seznam lokálních kampaní, vytvoření, otevření, přejmenování a bezpečná archivace.
 - **Hrát** – kompaktní campaign bar, chat, composer a Character Cockpit.
 - **Knihovna** – kategorie entit aktuální kampaně, filtrování a otevření existující Entity Card.
-- **Nastavení** – globální API klíč a test spojení, nastavení AI pro kampaň, aktualizace, úložiště a informace o aplikaci.
+- **Log** – stránkovaný a filtrovatelný sanitizovaný provozní log s bezpečným exportem JSON/TXT.
+- **Nastavení** – globální API klíč a test spojení, nastavení AI pro kampaň, aktualizace aplikace i rules packů, licence, úložiště a informace o aplikaci.
 
-Aktivní view, poslední kampaň a viditelnost Cockpitu jsou UI preference v `localStorage`. Nejsou součástí world state ani databázového schématu. Schéma zůstává v6.
+Globální `ToastService` zobrazuje nahoře nejvýše čtyři přístupná oznámení typu success/info/warning/error. Shodné zprávy deduplikuje jako `×N` a po pěti sekundách je odstraní. Chat používá Enter pro odeslání, Shift+Enter pro nový řádek, respektuje IME composition a roste od jednoho do osmi řádků.
+
+Aktivní view, poslední kampaň a viditelnost Cockpitu jsou UI preference v `localStorage`. Nejsou součástí world state ani databázového schématu.
 
 ## Výška a scrolling
 

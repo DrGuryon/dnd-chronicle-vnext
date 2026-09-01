@@ -12,7 +12,7 @@
 ```text
 user Message (local) → small SceneContext + recent local Messages
                      → OpenAI Responses stream
-                     → bounded read-only Chronicle tools (max 8 rounds / 24 calls)
+                     → cached/batched Chronicle tools (max 12 rounds / 40 calls)
                      → non-mutating proposal validation
                      → final assistant Message (local)
                      → review/manual approval OR automatic local commit
@@ -22,7 +22,7 @@ Model nedostává SQL, generický patch ani commit tool. `chronicle.propose_turn
 
 ## Nastavení a audit
 
-Každá Campaign má provider, model (výchozí `gpt-5.6-sol`), reasoning effort, verbosity, max output tokens, approval policy a vlastní instrukce. `ai_turn_runs` ukládá stav, prompt version, model, časy, provider response ID a dostupné token counts. Cena se nehardcoduje, protože se může měnit.
+Každá Campaign má provider, model (výchozí `gpt-5.6-sol`), reasoning effort, verbosity, max output tokens, approval policy a vlastní instrukce. `ai_turn_runs` ukládá stav, prompt version, model, časy, provider response ID, dostupné token counts a agregovaný souhrn použití nástrojů. Cena se nehardcoduje, protože se může měnit.
 
 Pro modely GPT-5.6 aplikace nabízí `none`, `low`, `medium`, `high` a `xhigh`. Starší uložená hodnota `minimal` se při použití GPT-5.6 bezpečně interpretuje jako `low`; databázové schéma se kvůli tomu nemění. Test připojení neposílá modelově specifický reasoning effort.
 

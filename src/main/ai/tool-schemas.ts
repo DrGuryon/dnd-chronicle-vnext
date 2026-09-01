@@ -88,6 +88,20 @@ const toolSchemas: Readonly<Record<string, JsonSchema>> = {
     includeHomebrew: { type: 'boolean' },
     limit: nullableNumber,
   }),
+  'chronicle.search_rule_definitions_batch': object({
+    campaignId: string,
+    queries: { type: 'array', minItems: 1, maxItems: 20, items: object({
+      key: string, query: nullableString, definitionTypes: nullableStringArray,
+      includeHomebrew: { type: 'boolean' }, limit: nullableNumber,
+    }) },
+  }),
+  'chronicle.get_character_edit_context': object({ campaignId: string, characterId: string }),
+  'chronicle.get_entities_context': object({
+    campaignId: string,
+    entities: { type: 'array', minItems: 1, maxItems: 20, items: object({
+      key: string, entityId: string, kind: nullableString,
+    }) },
+  }),
 };
 
 export function strictToolDescriptor(descriptor: ChronicleToolDescriptor): ChronicleToolDescriptor {
@@ -111,6 +125,8 @@ export function proposalToolDescriptor(): ChronicleToolDescriptor {
       reasoningSummary: nullableString,
     }),
     mutatesState: false,
+    kind: 'proposal',
+    cacheable: false,
     defaultLimits: { maxResults: 24, maxCharacters: 30_000 },
   };
 }
@@ -121,7 +137,7 @@ export function dataChangeProposalToolDescriptor(): ChronicleToolDescriptor {
     description: 'Validate typed permanent profile/canonical-data edits for explicit user review. This never commits or mutates campaign state.',
     inputSchema: object({
       summary: string,
-      changes: { type: 'array', maxItems: 40, items: { anyOf: dataChangeSchemas() } },
+      changes: { type: 'array', maxItems: 64, items: { anyOf: dataChangeSchemas() } },
       expectedRevisions: {
         anyOf: [
           { type: 'array', items: object({ entityId: string, revision: { type: 'integer', minimum: 1 } }) },
@@ -131,7 +147,9 @@ export function dataChangeProposalToolDescriptor(): ChronicleToolDescriptor {
       reasoningSummary: nullableString,
     }),
     mutatesState: false,
-    defaultLimits: { maxResults: 40, maxCharacters: 40_000 },
+    kind: 'proposal',
+    cacheable: false,
+    defaultLimits: { maxResults: 64, maxCharacters: 48_000 },
   };
 }
 
@@ -141,7 +159,39 @@ export function ruleDefinitionSearchToolDescriptor(): ChronicleToolDescriptor {
     description: 'Search built-in and campaign Homebrew rule definitions. Returns canonical IDs and never changes data.',
     inputSchema: toolSchemas['chronicle.search_rule_definitions']!,
     mutatesState: false,
+    kind: 'read',
+    cacheable: true,
     defaultLimits: { maxResults: 60, maxCharacters: 20_000 },
+  };
+}
+
+export function ruleDefinitionSearchBatchToolDescriptor(): ChronicleToolDescriptor {
+  return {
+    name: 'chronicle.search_rule_definitions_batch',
+    description: 'Resolve up to 20 independent rule-definition searches in one read-only call. Prefer this over repeated single searches.',
+    inputSchema: toolSchemas['chronicle.search_rule_definitions_batch']!,
+    mutatesState: false, kind: 'read', cacheable: true,
+    defaultLimits: { maxResults: 400, maxCharacters: 40_000 },
+  };
+}
+
+export function characterEditContextToolDescriptor(): ChronicleToolDescriptor {
+  return {
+    name: 'chronicle.get_character_edit_context',
+    description: 'Load the complete editable character profile, revision and referenced rule definitions in one read-only call.',
+    inputSchema: toolSchemas['chronicle.get_character_edit_context']!,
+    mutatesState: false, kind: 'read', cacheable: true,
+    defaultLimits: { maxResults: 200, maxCharacters: 48_000 },
+  };
+}
+
+export function entitiesContextToolDescriptor(): ChronicleToolDescriptor {
+  return {
+    name: 'chronicle.get_entities_context',
+    description: 'Load summaries for up to 20 known entity IDs in one read-only call. Use keys to preserve the requested mapping.',
+    inputSchema: toolSchemas['chronicle.get_entities_context']!,
+    mutatesState: false, kind: 'read', cacheable: true,
+    defaultLimits: { maxResults: 20, maxCharacters: 30_000 },
   };
 }
 
@@ -217,6 +267,7 @@ function dataChangeSchemas(): JsonSchema[] {
       type: constant('ruleDefinition.homebrew.create'), definitionId: nullableString,
       definitionType: string, name: string, description: string,
       aliases: { type: 'array', items: string },
+      parentDefinitionId: nullableString,
     }),
   ];
 }

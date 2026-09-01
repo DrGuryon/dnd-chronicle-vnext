@@ -84,6 +84,13 @@ export class DataChangeService {
 
     const newCharacters = new Set<string>();
     const newDefinitions = new Map<string, string>();
+    const plannedDefinitions = new Map(normalized.changes
+      .filter((change): change is Extract<DataChange, { type: 'ruleDefinition.homebrew.create' }> => change.type === 'ruleDefinition.homebrew.create')
+      .map((change) => [change.definitionId, change.definitionType]));
+    const plannedParents = new Map(normalized.changes
+      .filter((change): change is Extract<DataChange, { type: 'ruleDefinition.homebrew.create' }> => change.type === 'ruleDefinition.homebrew.create')
+      .filter((change) => Boolean(change.parentDefinitionId))
+      .map((change) => [change.definitionId, change.parentDefinitionId!]));
     const newSpellSources = new Set(
       normalized.changes
         .filter((change): change is Extract<DataChange, { type: 'character.spellcastingSource.add' }> => change.type === 'character.spellcastingSource.add')
@@ -107,12 +114,32 @@ export class DataChangeService {
           }
           requiredText(change.definitionType, 'Typ definice', 80);
           requiredText(change.name, 'Název definice', 160);
+          const expectedParentTypes = parentTypesFor(change.definitionType);
+          if (expectedParentTypes.length && !change.parentDefinitionId) {
+            throw new ChronicleEngineError('INVALID_INPUT', `${change.definitionType} musí mít vybranou nadřazenou definici.`);
+          }
+          if (change.parentDefinitionId) {
+            requireDomainId(change.parentDefinitionId, 'def');
+            const parent = this.definition(change.parentDefinitionId);
+            const pendingParentType = plannedDefinitions.get(change.parentDefinitionId);
+            if (!parent && !pendingParentType) throw new ChronicleEngineError('ENTITY_NOT_FOUND', `Nadřazená definice ${change.parentDefinitionId} neexistuje.`);
+            const parentType = parent?.definitionType ?? pendingParentType!;
+            if (expectedParentTypes.length && !expectedParentTypes.includes(parentType)) {
+              throw new ChronicleEngineError('INVALID_INPUT', `Nadřazená definice musí být typu ${expectedParentTypes.join(' nebo ')}.`);
+            }
+            if (parent && (parent.rulesetId !== campaign.rulesetId || parent.rulesetVersion !== campaign.rulesetVersion)) {
+              throw new ChronicleEngineError('CROSS_CAMPAIGN_REFERENCE', 'Nadřazená definice patří jinému rulesetu.');
+            }
+            if (parent?.campaignId && parent.campaignId !== campaign.id) {
+              throw new ChronicleEngineError('CROSS_CAMPAIGN_REFERENCE', 'Nadřazená Homebrew definice patří jiné kampani.');
+            }
+          }
           newDefinitions.set(change.definitionId, change.definitionType);
           return;
         }
         const characterId = characterIdFor(change);
         if (characterId) this.requireCharacter(characterId, campaign.id, newCharacters);
-        this.validateChange(change, campaign, newDefinitions, newCharacters, newSpellSources);
+        this.validateChange(change, campaign, plannedDefinitions, plannedParents, newCharacters, newSpellSources);
       } catch (error) {
         const mapped = error instanceof ChronicleEngineError ? error : new ChronicleEngineError('INVALID_INPUT', message(error));
         errors.push({ code: mapped.code, message: mapped.message, changeIndex: index });
@@ -252,6 +279,7 @@ export class DataChangeService {
     change: Exclude<DataChange, { type: 'character.create' } | { type: 'ruleDefinition.homebrew.create' }>,
     campaign: { id: string; rulesetId: string; rulesetVersion: string },
     newDefinitions: ReadonlyMap<string, string>,
+    newDefinitionParents: ReadonlyMap<string, string>,
     newCharacters: ReadonlySet<string>,
     newSpellSources: ReadonlySet<string>,
   ): void {
@@ -274,6 +302,16 @@ export class DataChangeService {
         throw new ChronicleEngineError('INVALID_INPUT', `Definice ${id} musí být typu ${types.join(' nebo ')}.`);
       }
     };
+    const requireParent = (childId: string | null, parentId: string | null, relationTypes: readonly string[]): void => {
+      if (!childId || !parentId) return;
+      if (newDefinitionParents.get(childId) === parentId) return;
+      const found = this.database.prepare(`
+        SELECT 1 FROM rule_definition_relations
+        WHERE source_definition_id = ? AND target_definition_id = ?
+          AND relation_type IN (${relationTypes.map(() => '?').join(', ')})
+      `).get(childId, parentId, ...relationTypes);
+      if (!found) throw new ChronicleEngineError('INVALID_INPUT', 'Vybraná podřazená definice nepatří k nadřazené volbě.');
+    };
     switch (change.type) {
       case 'character.identity.set':
         requiredText(change.name, 'Jméno postavy', 120);
@@ -290,18 +328,21 @@ export class DataChangeService {
         definition(change.speciesId, ['Species', 'Race']);
         definition(change.lineageId, ['Lineage', 'Subrace']);
         definition(change.backgroundId, ['Background']);
+        requireParent(change.lineageId, change.speciesId, ['belongsToSpecies', 'belongsToRace']);
         break;
       case 'character.class.add':
         requireDomainId(change.classEntryId, 'class');
         if (this.row('character_classes', change.classEntryId)) throw new ChronicleEngineError('TRANSACTION_CONFLICT', `Class entry ${change.classEntryId} už existuje.`);
         definition(change.classId, ['Class']);
         definition(change.subclassId, ['Subclass']);
+        requireParent(change.subclassId, change.classId, ['belongsToClass']);
         level(change.level);
         break;
       case 'character.class.update':
         this.requireOwnedRow('character_classes', change.classEntryId, change.characterId, 'class');
         definition(change.classId, ['Class']);
         definition(change.subclassId, ['Subclass']);
+        requireParent(change.subclassId, change.classId, ['belongsToClass']);
         level(change.level);
         break;
       case 'character.class.remove':
@@ -578,6 +619,13 @@ export class DataChangeService {
           .run(change.definitionId, change.definitionType, campaign.rulesetId, campaign.rulesetVersion,
             change.name.trim(), change.description.trim(), now, now, transaction.campaignId,
             JSON.stringify(change.aliases));
+        if (change.parentDefinitionId) {
+          const relationType = relationTypeFor(change.definitionType);
+          if (relationType) this.database.prepare(`
+            INSERT INTO rule_definition_relations(source_definition_id, target_definition_id, relation_type)
+            VALUES (?, ?, ?)
+          `).run(change.definitionId, change.parentDefinitionId, relationType);
+        }
         return applied(change, null, null, { definitionId: change.definitionId, name: change.name });
       }
       case 'ruleDefinition.homebrew.update': {
@@ -808,3 +856,16 @@ function json(value: unknown): string | null { return value === null || value ==
 function sha256(value: string): string { return createHash('sha256').update(value).digest('hex'); }
 function timestamp(): string { return new Date().toISOString(); }
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+
+function parentTypesFor(definitionType: string): readonly string[] {
+  if (definitionType === 'Lineage' || definitionType === 'Subrace') return ['Species', 'Race'];
+  if (definitionType === 'Subclass') return ['Class'];
+  return [];
+}
+
+function relationTypeFor(definitionType: string): string | null {
+  if (definitionType === 'Lineage') return 'belongsToSpecies';
+  if (definitionType === 'Subrace') return 'belongsToRace';
+  if (definitionType === 'Subclass') return 'belongsToClass';
+  return null;
+}

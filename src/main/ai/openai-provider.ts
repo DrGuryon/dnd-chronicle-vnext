@@ -13,13 +13,19 @@ import type {
   AiProviderEvent,
   AiProviderTurnInput,
   AiUsage,
+  ToolUsageSummary,
 } from '../../shared/ai';
 import { normalizeAiReasoningEffort } from '../../shared/ai';
 import { ChronicleEngineError } from '../engine/service';
 import { strictToolDescriptor, validateOpenAiStrictToolSchema } from './tool-schemas';
 
-const MAX_TOOL_ROUNDS = 8;
-const MAX_TOOL_CALLS = 24;
+export interface AiToolLimits {
+  maxRounds: number;
+  maxCalls: number;
+  softLimitRatio: number;
+}
+
+export const DEFAULT_AI_TOOL_LIMITS: AiToolLimits = { maxRounds: 12, maxCalls: 40, softLimitRatio: 0.75 };
 
 export interface OpenAiResponsesClient {
   responses: {
@@ -30,11 +36,17 @@ export interface OpenAiResponsesClient {
 export class OpenAiProvider implements AiProvider {
   readonly id = 'openai' as const;
   private readonly client: OpenAiResponsesClient;
+  private readonly limits: AiToolLimits;
 
-  constructor(apiKeyOrClient: string | OpenAiResponsesClient) {
+  constructor(apiKeyOrClient: string | OpenAiResponsesClient, limits: Partial<AiToolLimits> = {}) {
     this.client = typeof apiKeyOrClient === 'string'
       ? new OpenAI({ apiKey: apiKeyOrClient }) as unknown as OpenAiResponsesClient
       : apiKeyOrClient;
+    this.limits = {
+      maxRounds: Math.max(1, Math.trunc(limits.maxRounds ?? DEFAULT_AI_TOOL_LIMITS.maxRounds)),
+      maxCalls: Math.max(1, Math.trunc(limits.maxCalls ?? DEFAULT_AI_TOOL_LIMITS.maxCalls)),
+      softLimitRatio: Math.min(0.95, Math.max(0.5, limits.softLimitRatio ?? DEFAULT_AI_TOOL_LIMITS.softLimitRatio)),
+    };
   }
 
   async *runTurn(input: AiProviderTurnInput): AsyncIterable<AiProviderEvent> {
@@ -44,6 +56,12 @@ export class OpenAiProvider implements AiProvider {
     let fullText = '';
     let responseId: string | null = null;
     const usage = emptyUsage();
+    const toolUsage: ToolUsageSummary = {
+      totalCalls: 0, totalRounds: 0, byTool: {}, cacheHits: 0,
+      duplicateCallsAvoided: 0, maxReached: false,
+    };
+    let forceFinal = false;
+    let softWarned = false;
 
     try {
       const toolBindings = new Map<string, ChronicleToolBinding>();
@@ -58,7 +76,7 @@ export class OpenAiProvider implements AiProvider {
             { toolName: tool.name, providerName },
           );
         }
-        toolBindings.set(providerName, { name: tool.name });
+        toolBindings.set(providerName, { name: tool.name, kind: tool.kind });
         return {
           type: 'function' as const,
           name: providerName,
@@ -71,13 +89,15 @@ export class OpenAiProvider implements AiProvider {
         assertNotAborted(input.signal);
         const request = {
           model: input.modelId,
-          instructions: input.instructions,
+          instructions: forceFinal
+            ? `${input.instructions}\n\nTool budget is exhausted. Give the user a concise, useful final answer from the information already collected. Do not request or call more tools.`
+            : input.instructions,
           input: responseInput,
-          tools,
+          tools: forceFinal ? [] : tools,
           reasoning: { effort: normalizeAiReasoningEffort(input.modelId, input.reasoningEffort) },
           text: { verbosity: input.verbosity },
           max_output_tokens: input.maxOutputTokens,
-          parallel_tool_calls: false,
+          parallel_tool_calls: !forceFinal,
           store: false,
           stream: true,
         } satisfies ResponseCreateParamsStreaming;
@@ -115,21 +135,44 @@ export class OpenAiProvider implements AiProvider {
         if (calls.length === 0) break;
         toolRounds += 1;
         toolCalls += calls.length;
-        if (toolRounds > MAX_TOOL_ROUNDS || toolCalls > MAX_TOOL_CALLS) {
-          throw new ChronicleEngineError(
-            'AI_TOOL_LIMIT',
-            `AI překročila bezpečný limit ${MAX_TOOL_ROUNDS} kol nebo ${MAX_TOOL_CALLS} volání nástrojů.`,
-          );
-        }
-        const outputs: ResponseInput = [];
-        for (const call of calls) {
+        toolUsage.totalRounds = toolRounds;
+        toolUsage.totalCalls = toolCalls;
+        const resolvedCalls = calls.map((call) => {
           const binding = toolBindings.get(call.name);
-          if (!binding) {
-            throw new ChronicleEngineError('OPENAI_TOOL_ARGUMENTS', `OpenAI zavolalo neznámý nástroj ${call.name}.`);
+          if (!binding) throw new ChronicleEngineError('OPENAI_TOOL_ARGUMENTS', `OpenAI zavolalo neznámý nástroj ${call.name}.`);
+          (toolUsage.byTool as Record<string, number>)[binding.name] = (toolUsage.byTool[binding.name] ?? 0) + 1;
+          return { call, binding, args: parseArguments(call.arguments, binding.name) };
+        });
+        if (toolRounds > this.limits.maxRounds || toolCalls > this.limits.maxCalls) {
+          toolUsage.maxReached = true;
+          const outputs = resolvedCalls.map(({ call }) => ({
+            type: 'function_call_output' as const,
+            call_id: call.call_id,
+            output: JSON.stringify({ ok: false, code: 'AI_TOOL_LIMIT', message: 'Bezpečný rozpočet nástrojů byl vyčerpán. Dokonči odpověď bez dalších nástrojů.' }),
+          }));
+          responseInput = [...responseInput, ...output, ...outputs] as unknown as ResponseInput;
+          forceFinal = true;
+          continue;
+        }
+        const atSoftLimit = toolRounds >= Math.ceil(this.limits.maxRounds * this.limits.softLimitRatio)
+          || toolCalls >= Math.ceil(this.limits.maxCalls * this.limits.softLimitRatio);
+        const addSoftWarning = atSoftLimit && !softWarned;
+        if (addSoftWarning) softWarned = true;
+        const outputs: ResponseInput = [];
+        for (const { call, binding } of resolvedCalls) yield { type: 'tool-start', callId: call.call_id, name: binding.name };
+        const invoke = ({ call, binding, args }: (typeof resolvedCalls)[number]) => input.executeTool({
+          callId: call.call_id, name: binding.name, arguments: args,
+        });
+        const results = resolvedCalls.every(({ binding }) => binding.kind === 'read')
+          ? await Promise.all(resolvedCalls.map(invoke))
+          : await sequentialMap(resolvedCalls, invoke);
+        for (let index = 0; index < resolvedCalls.length; index += 1) {
+          const { call, binding } = resolvedCalls[index]!;
+          const result = results[index]!;
+          if (result.cached) {
+            toolUsage.cacheHits += 1;
+            toolUsage.duplicateCallsAvoided += 1;
           }
-          yield { type: 'tool-start', callId: call.call_id, name: binding.name };
-          const args = parseArguments(call.arguments, binding.name);
-          const result = await input.executeTool({ callId: call.call_id, name: binding.name, arguments: args });
           outputs.push({
             type: 'function_call_output',
             call_id: call.call_id,
@@ -142,9 +185,16 @@ export class OpenAiProvider implements AiProvider {
             outputTruncated: result.truncated,
           };
         }
-        responseInput = [...responseInput, ...output, ...outputs] as unknown as ResponseInput;
+        responseInput = [
+          ...responseInput, ...output, ...outputs,
+          ...(addSoftWarning ? [{
+            role: 'system' as const,
+            content: 'You have used at least 75% of the safe tool budget. Consolidate remaining reads into batch tools and finish as soon as possible.',
+          }] : []),
+        ] as unknown as ResponseInput;
       }
       yield { type: 'usage', usage };
+      yield { type: 'tool-usage', usage: toolUsage };
       yield { type: 'completed', responseId, text: fullText };
     } catch (error) {
       throw mapOpenAiError(error);
@@ -169,6 +219,13 @@ export class OpenAiProvider implements AiProvider {
 
 interface ChronicleToolBinding {
   name: string;
+  kind: 'read' | 'proposal';
+}
+
+async function sequentialMap<T, R>(items: readonly T[], operation: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (const item of items) results.push(await operation(item));
+  return results;
 }
 
 export function toOpenAiToolName(name: string): string {

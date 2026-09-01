@@ -1,6 +1,6 @@
 import type { RuntimeWorkspaceCampaign } from '../shared/chronicle-engine';
 
-export const AppViews = ['overview', 'campaigns', 'play', 'library', 'settings'] as const;
+export const AppViews = ['overview', 'campaigns', 'play', 'library', 'log', 'settings'] as const;
 export type AppView = typeof AppViews[number];
 
 export interface StartupRoute {

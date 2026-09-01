@@ -19,6 +19,9 @@ module.exports = {
     'dist/**/*',
     'package.json',
   ],
+  extraResources: [
+    { from: 'rules-packs', to: 'rules-packs', filter: ['**/*.json'] },
+  ],
   asar: true,
   electronDownload: electronCache ? { cache: electronCache } : undefined,
   win: {

@@ -30,9 +30,9 @@ Databáze není součástí instalace. Za běhu se vytvoří v Electron `userDat
 
 Přeinstalace ani odinstalace aplikace tento adresář nemaže. Před každou budoucí migrací již existující databáze se do `backups/` vytvoří konzistentní SQLite backup.
 
-Schéma v7 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Přidává globální verzovaný katalog otevřených pravidel, Character Builder/Editor 2.0 a idempotentní `DataChangeTransaction` pro ruční i AI úpravy profilu. Administrativní audit je oddělený od událostí fikčního světa. Runtime scény, observer-aware Knowledge, Turn Transactions, vztahové profily a preference panelu zůstávají zachované.
+Schéma v8 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Přidává vztahy mezi pravidlovými definicemi, samostatně aktualizovatelné rules packy, omezený sanitizovaný aplikační log a telemetrii AI nástrojů. Character Builder/Editor 2.0 a idempotentní `DataChangeTransaction` dál sjednocují ruční i AI úpravy profilu. Administrativní audit je oddělený od událostí fikčního světa.
 
-Renderer SQL ani API klíč přímo nepoužívá. Chronicle Engine sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny. OpenAI adapter používá oficiální SDK a Responses API s `store: false`; běžné testy používají Fake provider a síť nevolají. Nové vrstvy popisují [`docs/ruleset-registry.md`](docs/ruleset-registry.md), [`docs/rules-content-catalog.md`](docs/rules-content-catalog.md), [`docs/editable-domain.md`](docs/editable-domain.md), [`docs/character-editor.md`](docs/character-editor.md) a [`docs/ai-orchestration.md`](docs/ai-orchestration.md).
+Renderer SQL ani API klíč přímo nepoužívá. Chronicle Engine sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny. OpenAI adapter používá oficiální SDK a Responses API s `store: false`, paralelizuje pouze nezávislá čtení, používá turnovou cache a bezpečný rozpočet 12 kol / 40 volání. Běžné testy používají Fake provider a síť nevolají. Nové vrstvy popisují [`docs/rules-content-catalog.md`](docs/rules-content-catalog.md), [`docs/character-editor.md`](docs/character-editor.md), [`docs/ai-orchestration.md`](docs/ai-orchestration.md) a [`docs/app-log.md`](docs/app-log.md).
 
 ## Nastavení AI
 
@@ -50,11 +50,13 @@ Lokální build úmyslně nemá natvrdo zadaný cizí release server. Release wo
 
 Pro produkční distribuci nastavte repozitářové secrets `WIN_CSC_LINK` a `WIN_CSC_KEY_PASSWORD`. Bez certifikátu je lokální prototyp funkční, ale Windows může zobrazit SmartScreen varování a build nepoužívá Authenticode ověření identity vydavatele.
 
+Balíčky otevřených pravidel se aktualizují odděleně od aplikace v **Nastavení → Balíčky pravidel**. Stažený JSON se před aktivací kontroluje podle schématu, referencí a SHA-256; při chybě nebo nedostupné síti zůstane aktivní poslední ověřená kopie. Aplikace funguje i zcela offline. Každý pack zobrazuje licenci, atribuci a odkaz na zdroj; součástí projektu není proprietární obsah mimo uvedené otevřené SRD zdroje.
+
 ## Release
 
 1. Zvyšte `version` v `package.json`.
 2. Commitněte změnu.
-3. Vytvořte odpovídající tag, např. `v0.8.0`.
+3. Vytvořte odpovídající tag, např. `v0.9.0`.
 4. Pushněte tag. GitHub Actions provede testy, build a publikaci.
 
 Nikdy nemíchejte installer a `latest.yml` z různých buildů; updater ověřuje SHA-512 metadata.

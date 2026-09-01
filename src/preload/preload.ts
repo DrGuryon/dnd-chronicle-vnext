@@ -148,6 +148,11 @@ const api: ChronicleApi = {
   getDataChangeAudit: (campaignId) => ipcRenderer.invoke(
     'data-change:list-audit', campaignId,
   ) as ReturnType<ChronicleApi['getDataChangeAudit']>,
+  queryAppLog: (query) => ipcRenderer.invoke('app-log:query', query) as ReturnType<ChronicleApi['queryAppLog']>,
+  clearAppLog: () => ipcRenderer.invoke('app-log:clear') as ReturnType<ChronicleApi['clearAppLog']>,
+  exportAppLog: (request) => ipcRenderer.invoke('app-log:export', request) as ReturnType<ChronicleApi['exportAppLog']>,
+  listRulesPacks: () => ipcRenderer.invoke('rules-packs:list') as ReturnType<ChronicleApi['listRulesPacks']>,
+  updateRulesPacks: (packId) => ipcRenderer.invoke('rules-packs:update', packId) as ReturnType<ChronicleApi['updateRulesPacks']>,
   getAiSettings: (campaignId) => ipcRenderer.invoke('ai:get-settings', campaignId) as ReturnType<ChronicleApi['getAiSettings']>,
   saveAiSettings: (command) => ipcRenderer.invoke('ai:save-settings', command) as ReturnType<ChronicleApi['saveAiSettings']>,
   getAiSecretStatus: () => ipcRenderer.invoke('ai:get-secret-status') as ReturnType<ChronicleApi['getAiSecretStatus']>,

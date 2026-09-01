@@ -29,9 +29,9 @@ const builtInRulesets: readonly RulesetDescriptor[] = [
       {
         id: '2024',
         label: '2024',
-        catalogPackId: 'dnd5e-srd-5.2',
+        catalogPackId: 'dnd5e-srd-5.2.1',
         catalogPackVersion: '1.0.0',
-        sourceLabel: 'D&D 5E SRD 5.2 (CC BY 4.0)',
+        sourceLabel: 'D&D 5E SRD 5.2.1 (CC BY 4.0)',
         speciesLabel: 'Druh',
       },
     ],

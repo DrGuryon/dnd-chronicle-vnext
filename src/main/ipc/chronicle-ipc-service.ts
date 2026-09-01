@@ -41,12 +41,35 @@ import type {
   RuleReconciliationSuggestion,
 } from '../../shared/editable-domain';
 import type { RulesetDescriptor } from '../../rules/registry';
+import type { AppLogPage, AppLogQuery } from '../../shared/app-log';
+import type { RulesPackStatus, RulesPackUpdateResult } from '../../shared/rules-packs';
 
 export class ChronicleIpcService {
   constructor(private readonly database: ChronicleDatabase) {}
 
   listCampaigns(): RuntimeWorkspaceCampaign[] {
     return this.database.engine.getRuntimeWorkspace().campaigns;
+  }
+
+  queryAppLog(value?: unknown): AppLogPage {
+    const input = value === undefined || value === null ? {} : object(value, 'App log query');
+    return this.database.appLog.query({
+      severity: typeof input.severity === 'string' ? input.severity as AppLogQuery['severity'] : undefined,
+      category: typeof input.category === 'string' ? input.category as AppLogQuery['category'] : undefined,
+      campaignId: typeof input.campaignId === 'string' ? input.campaignId : undefined,
+      search: typeof input.search === 'string' ? input.search.slice(0, 200) : undefined,
+      offset: typeof input.offset === 'number' ? input.offset : undefined,
+      limit: typeof input.limit === 'number' ? input.limit : undefined,
+    });
+  }
+
+  clearAppLog(): number { return this.database.appLog.clear(); }
+
+  listRulesPacks(): RulesPackStatus[] { return this.database.rulesPacks.list(); }
+
+  updateRulesPacks(value?: unknown): Promise<RulesPackUpdateResult[]> {
+    if (value !== undefined && value !== null && typeof value !== 'string') throw new Error('Pack ID musí být text.');
+    return this.database.rulesPacks.update(typeof value === 'string' ? value : undefined);
   }
 
   createCampaign(value: unknown): RuntimeWorkspaceCampaign {

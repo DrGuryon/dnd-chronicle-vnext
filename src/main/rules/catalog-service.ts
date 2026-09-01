@@ -58,7 +58,7 @@ export class RulesCatalogService {
 
   get(id: string): RuleDefinition | undefined {
     const row = this.database.prepare(`${definitionSelect} WHERE id = ?`).get(id) as unknown as DefinitionRow | undefined;
-    return row ? mapDefinition(row) : undefined;
+    return row ? this.attachParents([mapDefinition(row)])[0] : undefined;
   }
 
   search(input: RuleCatalogQuery): RuleCatalogResult {
@@ -79,6 +79,15 @@ export class RulesCatalogService {
       clauses.push(`definition_type IN (${types.map(() => '?').join(', ')})`);
       values.push(...types);
     }
+    if (input.parentDefinitionId) {
+      clauses.push(`EXISTS (
+        SELECT 1 FROM rule_definition_relations relation
+        WHERE relation.source_definition_id = rule_definitions.id
+          AND relation.target_definition_id = ?
+          AND relation.relation_type IN ('belongsToSpecies', 'belongsToRace', 'belongsToClass')
+      )`);
+      values.push(input.parentDefinitionId);
+    }
     const query = input.query?.trim();
     if (query) {
       clauses.push('(name LIKE ? COLLATE NOCASE OR aliases LIKE ? COLLATE NOCASE)');
@@ -90,7 +99,7 @@ export class RulesCatalogService {
     const rows = this.database.prepare(`${definitionSelect} WHERE ${where}
       ORDER BY is_builtin DESC, definition_type, name COLLATE NOCASE, id LIMIT ?`)
       .all(...values, limit) as unknown as DefinitionRow[];
-    return { items: rows.map(mapDefinition), total: count.count, truncated: count.count > rows.length };
+    return { items: this.attachParents(rows.map(mapDefinition)), total: count.count, truncated: count.count > rows.length };
   }
 
   reconciliationSuggestions(campaignId: string, characterId?: string): RuleReconciliationSuggestion[] {
@@ -172,6 +181,24 @@ export class RulesCatalogService {
       WHERE e.campaign_id = ? ${characterClause}
     `).all(...repeatValues(values, 8)) as unknown as ReferenceRow[];
   }
+
+  private attachParents(items: RuleDefinition[]): RuleDefinition[] {
+    if (!items.length) return items;
+    const placeholders = items.map(() => '?').join(', ');
+    const relations = this.database.prepare(`
+      SELECT source_definition_id AS sourceId, target_definition_id AS targetId
+      FROM rule_definition_relations
+      WHERE source_definition_id IN (${placeholders})
+        AND relation_type IN ('belongsToSpecies', 'belongsToRace', 'belongsToClass')
+    `).all(...items.map((item) => item.id)) as unknown as Array<{ sourceId: string; targetId: string }>;
+    const parents = new Map<string, string[]>();
+    for (const relation of relations) {
+      const current = parents.get(relation.sourceId) ?? [];
+      current.push(relation.targetId);
+      parents.set(relation.sourceId, current);
+    }
+    return items.map((item) => ({ ...item, parentDefinitionIds: parents.get(item.id) ?? [] }));
+  }
 }
 
 function repeatValues(values: readonly string[], count: number): string[] {
@@ -212,6 +239,7 @@ function mapDefinition(row: DefinitionRow): RuleDefinition {
     packVersion: row.packVersion,
     locale: row.locale,
     builtIn: Boolean(row.builtIn),
+    parentDefinitionIds: [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

@@ -1,0 +1,1617 @@
+{
+  "manifest": {
+    "schemaVersion": 1,
+    "packId": "dnd5e-srd-5.2.1",
+    "version": "1.0.0",
+    "rulesetId": "dnd5e",
+    "rulesetVersion": "2024",
+    "displayName": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+    "license": "CC BY 4.0",
+    "attribution": "Dungeons & Dragons System Reference Document, Wizards of the Coast LLC.",
+    "sourceUrl": "https://www.dndbeyond.com/srd",
+    "updateUrl": "https://raw.githubusercontent.com/DrGuryon/dnd-chronicle-vnext/main/rules-packs/dnd5e-srd-5.2.1/latest.json",
+    "publishedAt": "2025-04-22T00:00:00.000Z",
+    "contentHash": "sha256:3b4f8ced8576a28a015d367ccd9197df44dd2c8450257155d3b07b6986edb766"
+  },
+  "payload": {
+    "definitions": [
+      {
+        "id": "def_dnd5e_2024_species_human",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:human",
+        "name": "Human",
+        "aliases": [
+          "Člověk"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_dwarf",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:dwarf",
+        "name": "Dwarf",
+        "aliases": [
+          "Trpaslík"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_elf",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:elf",
+        "name": "Elf",
+        "aliases": [
+          "Elf"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_halfling",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:halfling",
+        "name": "Halfling",
+        "aliases": [
+          "Půlčík"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_dragonborn",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:dragonborn",
+        "name": "Dragonborn",
+        "aliases": [
+          "Drakorozený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_gnome",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:gnome",
+        "name": "Gnome",
+        "aliases": [
+          "Gnóm"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_half_elf",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:half-elf",
+        "name": "Half-Elf",
+        "aliases": [
+          "Půlelf"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_half_orc",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:half-orc",
+        "name": "Half-Orc",
+        "aliases": [
+          "Půlork"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_species_tiefling",
+        "definitionType": "Species",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Species:tiefling",
+        "name": "Tiefling",
+        "aliases": [
+          "Tiefling"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_lineage_hill_dwarf",
+        "definitionType": "Lineage",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Lineage:hill-dwarf",
+        "name": "Hill Dwarf",
+        "aliases": [
+          "Horský trpaslík"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_lineage_high_elf",
+        "definitionType": "Lineage",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Lineage:high-elf",
+        "name": "High Elf",
+        "aliases": [
+          "Vznešený elf"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_lineage_lightfoot_halfling",
+        "definitionType": "Lineage",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Lineage:lightfoot-halfling",
+        "name": "Lightfoot Halfling",
+        "aliases": [
+          "Lehkonohý půlčík"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_barbarian",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:barbarian",
+        "name": "Barbarian",
+        "aliases": [
+          "Barbar"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_bard",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:bard",
+        "name": "Bard",
+        "aliases": [
+          "Bard"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_cleric",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:cleric",
+        "name": "Cleric",
+        "aliases": [
+          "Klerik"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_druid",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:druid",
+        "name": "Druid",
+        "aliases": [
+          "Druid"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_fighter",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:fighter",
+        "name": "Fighter",
+        "aliases": [
+          "Bojovník"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_monk",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:monk",
+        "name": "Monk",
+        "aliases": [
+          "Mnich"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_paladin",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:paladin",
+        "name": "Paladin",
+        "aliases": [
+          "Paladin"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_ranger",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:ranger",
+        "name": "Ranger",
+        "aliases": [
+          "Hraničář"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_rogue",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:rogue",
+        "name": "Rogue",
+        "aliases": [
+          "Tulák"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_sorcerer",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:sorcerer",
+        "name": "Sorcerer",
+        "aliases": [
+          "Čaroděj"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_warlock",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:warlock",
+        "name": "Warlock",
+        "aliases": [
+          "Černokněžník"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_class_wizard",
+        "definitionType": "Class",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Class:wizard",
+        "name": "Wizard",
+        "aliases": [
+          "Kouzelník"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_subclass_champion",
+        "definitionType": "Subclass",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Subclass:champion",
+        "name": "Champion",
+        "aliases": [
+          "Šampion"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_subclass_life_domain",
+        "definitionType": "Subclass",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Subclass:life-domain",
+        "name": "Life Domain",
+        "aliases": [
+          "Doména života"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_subclass_school_of_evocation",
+        "definitionType": "Subclass",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Subclass:school-of-evocation",
+        "name": "School of Evocation",
+        "aliases": [
+          "Škola zaklínání"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_subclass_oath_of_devotion",
+        "definitionType": "Subclass",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Subclass:oath-of-devotion",
+        "name": "Oath of Devotion",
+        "aliases": [
+          "Přísaha oddanosti"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_background_acolyte",
+        "definitionType": "Background",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Background:acolyte",
+        "name": "Acolyte",
+        "aliases": [
+          "Akolyta"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_background_criminal",
+        "definitionType": "Background",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Background:criminal",
+        "name": "Criminal",
+        "aliases": [
+          "Zločinec"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_background_sage",
+        "definitionType": "Background",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Background:sage",
+        "name": "Sage",
+        "aliases": [
+          "Mudrc"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_background_soldier",
+        "definitionType": "Background",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Background:soldier",
+        "name": "Soldier",
+        "aliases": [
+          "Voják"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_acrobatics",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:acrobatics",
+        "name": "Acrobatics",
+        "aliases": [
+          "Akrobacie"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_animal_handling",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:animal-handling",
+        "name": "Animal Handling",
+        "aliases": [
+          "Ovládání zvířat"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_arcana",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:arcana",
+        "name": "Arcana",
+        "aliases": [
+          "Mystika"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_athletics",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:athletics",
+        "name": "Athletics",
+        "aliases": [
+          "Atletika"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_deception",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:deception",
+        "name": "Deception",
+        "aliases": [
+          "Klamání"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_history",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:history",
+        "name": "History",
+        "aliases": [
+          "Historie"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_insight",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:insight",
+        "name": "Insight",
+        "aliases": [
+          "Vhled"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_intimidation",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:intimidation",
+        "name": "Intimidation",
+        "aliases": [
+          "Zastrašování"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_investigation",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:investigation",
+        "name": "Investigation",
+        "aliases": [
+          "Pátrání"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_medicine",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:medicine",
+        "name": "Medicine",
+        "aliases": [
+          "Lékařství"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_nature",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:nature",
+        "name": "Nature",
+        "aliases": [
+          "Příroda"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_perception",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:perception",
+        "name": "Perception",
+        "aliases": [
+          "Vnímání"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_performance",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:performance",
+        "name": "Performance",
+        "aliases": [
+          "Vystupování"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_persuasion",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:persuasion",
+        "name": "Persuasion",
+        "aliases": [
+          "Přesvědčování"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_religion",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:religion",
+        "name": "Religion",
+        "aliases": [
+          "Náboženství"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_sleight_of_hand",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:sleight-of-hand",
+        "name": "Sleight of Hand",
+        "aliases": [
+          "Čachry"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_stealth",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:stealth",
+        "name": "Stealth",
+        "aliases": [
+          "Nenápadnost"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_skill_survival",
+        "definitionType": "Skill",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Skill:survival",
+        "name": "Survival",
+        "aliases": [
+          "Přežití"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_common",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:common",
+        "name": "Common",
+        "aliases": [
+          "Obecná řeč"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_dwarvish",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:dwarvish",
+        "name": "Dwarvish",
+        "aliases": [
+          "Trpasličtina"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_elvish",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:elvish",
+        "name": "Elvish",
+        "aliases": [
+          "Elfština"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_giant",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:giant",
+        "name": "Giant",
+        "aliases": [
+          "Obřina"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_gnomish",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:gnomish",
+        "name": "Gnomish",
+        "aliases": [
+          "Gnómština"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_goblin",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:goblin",
+        "name": "Goblin",
+        "aliases": [
+          "Goblinština"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_halfling",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:halfling",
+        "name": "Halfling",
+        "aliases": [
+          "Půlčičtina"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_orc",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:orc",
+        "name": "Orc",
+        "aliases": [
+          "Orčtina"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_abyssal",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:abyssal",
+        "name": "Abyssal",
+        "aliases": [
+          "Abyssal"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_celestial",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:celestial",
+        "name": "Celestial",
+        "aliases": [
+          "Nebesština"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_draconic",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:draconic",
+        "name": "Draconic",
+        "aliases": [
+          "Dračí řeč"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_infernal",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:infernal",
+        "name": "Infernal",
+        "aliases": [
+          "Pekelná řeč"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_primordial",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:primordial",
+        "name": "Primordial",
+        "aliases": [
+          "Prvotní řeč"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_sylvan",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:sylvan",
+        "name": "Sylvan",
+        "aliases": [
+          "Sylvánština"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_language_undercommon",
+        "definitionType": "Language",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Language:undercommon",
+        "name": "Undercommon",
+        "aliases": [
+          "Podzemní obecná"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_acid",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:acid",
+        "name": "Acid",
+        "aliases": [
+          "Kyselinové"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_bludgeoning",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:bludgeoning",
+        "name": "Bludgeoning",
+        "aliases": [
+          "Drtivé"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_cold",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:cold",
+        "name": "Cold",
+        "aliases": [
+          "Chladné"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_fire",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:fire",
+        "name": "Fire",
+        "aliases": [
+          "Ohnivé"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_force",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:force",
+        "name": "Force",
+        "aliases": [
+          "Silové"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_lightning",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:lightning",
+        "name": "Lightning",
+        "aliases": [
+          "Bleskové"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_necrotic",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:necrotic",
+        "name": "Necrotic",
+        "aliases": [
+          "Nekrotické"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_piercing",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:piercing",
+        "name": "Piercing",
+        "aliases": [
+          "Bodné"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_poison",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:poison",
+        "name": "Poison",
+        "aliases": [
+          "Jedové"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_psychic",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:psychic",
+        "name": "Psychic",
+        "aliases": [
+          "Psychické"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_radiant",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:radiant",
+        "name": "Radiant",
+        "aliases": [
+          "Zářivé"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_slashing",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:slashing",
+        "name": "Slashing",
+        "aliases": [
+          "Sečné"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_damagetype_thunder",
+        "definitionType": "DamageType",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:DamageType:thunder",
+        "name": "Thunder",
+        "aliases": [
+          "Hromové"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_blinded",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:blinded",
+        "name": "Blinded",
+        "aliases": [
+          "Oslepený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_charmed",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:charmed",
+        "name": "Charmed",
+        "aliases": [
+          "Okouzlený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_deafened",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:deafened",
+        "name": "Deafened",
+        "aliases": [
+          "Ohlušený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_frightened",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:frightened",
+        "name": "Frightened",
+        "aliases": [
+          "Vystrašený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_grappled",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:grappled",
+        "name": "Grappled",
+        "aliases": [
+          "Uchvácený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_incapacitated",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:incapacitated",
+        "name": "Incapacitated",
+        "aliases": [
+          "Vyřazený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_invisible",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:invisible",
+        "name": "Invisible",
+        "aliases": [
+          "Neviditelný"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_paralyzed",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:paralyzed",
+        "name": "Paralyzed",
+        "aliases": [
+          "Paralyzovaný"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_petrified",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:petrified",
+        "name": "Petrified",
+        "aliases": [
+          "Zkamenělý"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_poisoned",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:poisoned",
+        "name": "Poisoned",
+        "aliases": [
+          "Otrávený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_prone",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:prone",
+        "name": "Prone",
+        "aliases": [
+          "Ležící"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_restrained",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:restrained",
+        "name": "Restrained",
+        "aliases": [
+          "Zadržený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_stunned",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:stunned",
+        "name": "Stunned",
+        "aliases": [
+          "Omráčený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_condition_unconscious",
+        "definitionType": "Condition",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Condition:unconscious",
+        "name": "Unconscious",
+        "aliases": [
+          "V bezvědomí"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_feat_grappler",
+        "definitionType": "Feat",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Feat:grappler",
+        "name": "Grappler",
+        "aliases": [
+          "Zápasník"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_feat_tough",
+        "definitionType": "Feat",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Feat:tough",
+        "name": "Tough",
+        "aliases": [
+          "Houževnatý"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_feat_skilled",
+        "definitionType": "Feat",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Feat:skilled",
+        "name": "Skilled",
+        "aliases": [
+          "Zkušený"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_bless",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:bless",
+        "name": "Bless",
+        "aliases": [
+          "Požehnání"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_cure_wounds",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:cure-wounds",
+        "name": "Cure Wounds",
+        "aliases": [
+          "Léčení zranění"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_fireball",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:fireball",
+        "name": "Fireball",
+        "aliases": [
+          "Ohnivá koule"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_guidance",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:guidance",
+        "name": "Guidance",
+        "aliases": [
+          "Vedení"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_healing_word",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:healing-word",
+        "name": "Healing Word",
+        "aliases": [
+          "Léčivé slovo"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_light",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:light",
+        "name": "Light",
+        "aliases": [
+          "Světlo"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_mage_hand",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:mage-hand",
+        "name": "Mage Hand",
+        "aliases": [
+          "Mágova ruka"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_magic_missile",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:magic-missile",
+        "name": "Magic Missile",
+        "aliases": [
+          "Magická střela"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      },
+      {
+        "id": "def_dnd5e_2024_spell_shield",
+        "definitionType": "Spell",
+        "rulesetId": "dnd5e",
+        "rulesetVersion": "2024",
+        "canonicalId": "dnd5e:2024:Spell:shield",
+        "name": "Shield",
+        "aliases": [
+          "Štít"
+        ],
+        "source": "D&D 5E SRD 5.2.1 (CC BY 4.0)",
+        "packId": "dnd5e-srd-5.2.1",
+        "packVersion": "1.0.0",
+        "locale": "en"
+      }
+    ],
+    "relations": [
+      {
+        "sourceDefinitionId": "def_dnd5e_2024_lineage_hill_dwarf",
+        "targetDefinitionId": "def_dnd5e_2024_species_dwarf",
+        "relationType": "belongsToSpecies"
+      },
+      {
+        "sourceDefinitionId": "def_dnd5e_2024_lineage_high_elf",
+        "targetDefinitionId": "def_dnd5e_2024_species_elf",
+        "relationType": "belongsToSpecies"
+      },
+      {
+        "sourceDefinitionId": "def_dnd5e_2024_lineage_lightfoot_halfling",
+        "targetDefinitionId": "def_dnd5e_2024_species_halfling",
+        "relationType": "belongsToSpecies"
+      },
+      {
+        "sourceDefinitionId": "def_dnd5e_2024_subclass_champion",
+        "targetDefinitionId": "def_dnd5e_2024_class_fighter",
+        "relationType": "belongsToClass"
+      },
+      {
+        "sourceDefinitionId": "def_dnd5e_2024_subclass_life_domain",
+        "targetDefinitionId": "def_dnd5e_2024_class_cleric",
+        "relationType": "belongsToClass"
+      },
+      {
+        "sourceDefinitionId": "def_dnd5e_2024_subclass_school_of_evocation",
+        "targetDefinitionId": "def_dnd5e_2024_class_wizard",
+        "relationType": "belongsToClass"
+      },
+      {
+        "sourceDefinitionId": "def_dnd5e_2024_subclass_oath_of_devotion",
+        "targetDefinitionId": "def_dnd5e_2024_class_paladin",
+        "relationType": "belongsToClass"
+      }
+    ]
+  }
+}

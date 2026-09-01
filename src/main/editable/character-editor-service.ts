@@ -117,6 +117,7 @@ export class CharacterEditorService {
         name: definition.name,
         description: definition.description ?? '',
         aliases: definition.aliases ?? [],
+        parentDefinitionId: definition.parentDefinitionId ?? null,
       });
     }
     if (!existing) {

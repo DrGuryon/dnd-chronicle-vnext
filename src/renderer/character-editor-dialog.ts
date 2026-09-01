@@ -11,6 +11,7 @@ type EditorMode = 'quick' | 'advanced';
 
 export class CharacterEditorDialog {
   private dirty = false;
+  private session: AbortController | null = null;
 
   constructor(private readonly dialog: HTMLDialogElement) {}
 
@@ -36,6 +37,10 @@ export class CharacterEditorDialog {
     ]);
     if (characterId && !view) throw new Error('Postava už neexistuje.');
     if (this.dialog.open) this.dialog.close();
+    this.session?.abort();
+    const session = new AbortController();
+    this.session = session;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.dirty = false;
     this.dialog.classList.add('character-editor-dialog');
     this.dialog.innerHTML = shell(campaign, view, catalog.items, reconciliations, mode);
@@ -54,15 +59,19 @@ export class CharacterEditorDialog {
         this.dirty = false;
         this.dialog.close();
       };
-      this.dialog.addEventListener('cancel', (event) => { event.preventDefault(); close(); }, { once: true });
+      this.dialog.addEventListener('cancel', (event) => { event.preventDefault(); close(); }, { signal: session.signal });
       this.dialog.addEventListener('close', () => {
         this.dialog.classList.remove('character-editor-dialog');
+        session.abort();
+        if (this.session === session) this.session = null;
+        if (previousFocus?.isConnected) previousFocus.focus();
         finish(savedResult);
-      }, { once: true });
-      this.dialog.querySelectorAll<HTMLElement>('[data-editor-cancel]').forEach((button) => button.addEventListener('click', close));
+      }, { once: true, signal: session.signal });
+      this.dialog.querySelectorAll<HTMLElement>('[data-editor-cancel]').forEach((button) => button.addEventListener('click', close, { signal: session.signal }));
       const form = this.dialog.querySelector<HTMLFormElement>('form')!;
-      form.addEventListener('input', () => { this.dirty = true; });
-      form.addEventListener('change', () => { this.dirty = true; });
+      wireDependentPickers(form, catalog.items, session.signal);
+      form.addEventListener('input', () => { this.dirty = true; }, { signal: session.signal });
+      form.addEventListener('change', () => { this.dirty = true; }, { signal: session.signal });
       this.dialog.querySelectorAll<HTMLButtonElement>('[data-reconcile-index]').forEach((button) => {
         button.addEventListener('click', async () => {
           const suggestion = reconciliations[Number(button.dataset.reconcileIndex)];
@@ -75,7 +84,7 @@ export class CharacterEditorDialog {
             showError(form, errorMessage(error));
             button.disabled = false;
           }
-        });
+        }, { signal: session.signal });
       });
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -95,8 +104,10 @@ export class CharacterEditorDialog {
           fieldset.disabled = false;
           submit.textContent = view ? 'Uložit změny' : 'Vytvořit postavu';
         }
+      }, { signal: session.signal });
+      requestAnimationFrame(() => {
+        if (!session.signal.aborted) form.querySelector<HTMLInputElement>('[name="name"]')?.focus();
       });
-      requestAnimationFrame(() => form.querySelector<HTMLInputElement>('[name="name"]')?.focus());
     });
   }
 }
@@ -125,11 +136,14 @@ function shell(
       </div>${advanced ? textarea('description', 'Krátký popis', view?.character.description ?? '') : ''}</section>
       <section class="editor-section"><h3>Původ a povolání</h3><div class="editor-grid">
         ${definitionField('species', 'Druh / rasa', definitionName(origin.speciesId, definitions), definitions, ['Species', 'Race'])}
-        ${advanced ? definitionField('lineage', 'Rod / poddruh', definitionName(origin.lineageId, definitions), definitions, ['Lineage', 'Subrace']) : ''}
+        ${advanced ? definitionField('lineage', 'Rod / poddruh', definitionName(origin.lineageId, definitions), definitions, ['Lineage', 'Subrace'], false, origin.speciesId) : ''}
         ${definitionField('background', 'Zázemí', definitionName(origin.backgroundId, definitions), definitions, ['Background'])}
       </div>
       ${advanced
-        ? textarea('classes', 'Povolání a multiclass (jeden řádek: Povolání | úroveň | Podtřída)', classLines(view, definitions))
+        ? `<div class="editor-grid">${definitionField('className', 'Hlavní povolání', definitionName(view?.classes[0]?.classId ?? null, definitions), definitions, ['Class'], true)}
+          ${definitionField('subclass', 'Podtřída', definitionName(view?.classes[0]?.subclassId ?? null, definitions), definitions, ['Subclass'], false, view?.classes[0]?.classId ?? null)}
+          ${numberField('level', 'Úroveň', view?.classes[0]?.level ?? 1, 1, 20)}</div>
+          ${textarea('additionalClasses', 'Další povolání (jeden řádek: Povolání | úroveň | Podtřída)', classLines(view, definitions, 1))}`
         : `<div class="editor-grid">${definitionField('className', 'Povolání', definitionName(view?.classes[0]?.classId ?? null, definitions), definitions, ['Class'], true)}${numberField('level', 'Úroveň', view?.classes[0]?.level ?? 1, 1, 20)}</div>`}
       <label class="editor-checkbox"><input type="checkbox" name="allowHomebrew"> <span>Neznámé názvy vytvořit jako Homebrew této kampaně</span></label>
       <p class="editor-hint">Začněte psát do pole a vyberte položku katalogu. Homebrew vznikne jen s výslovně zaškrtnutou volbou.</p></section>
@@ -194,7 +208,7 @@ function draftFromForm(
   if (!name) throw new Error('Zadejte jméno postavy.');
   const allowHomebrew = values.has('allowHomebrew');
   const homebrewDefinitions: NonNullable<CharacterDraft['homebrewDefinitions']>[number][] = [];
-  const resolve = (value: string, types: readonly string[], required = false): string | null => {
+  const resolve = (value: string, types: readonly string[], required = false, parentDefinitionId: string | null = null): string | null => {
     if (!value.trim()) {
       if (required) throw new Error(`Vyberte položku typu ${types.join(' / ')}.`);
       return null;
@@ -204,28 +218,36 @@ function draftFromForm(
       types.includes(definition.definitionType)
       && [definition.name, ...definition.aliases, definition.id].some((candidate) => normalize(candidate) === normalized)
     ));
-    if (match) return match.id;
+    if (match) {
+      if (parentDefinitionId && match.parentDefinitionIds.length && !match.parentDefinitionIds.includes(parentDefinitionId)) {
+        throw new Error(`„${value}“ nepatří k vybrané nadřazené položce.`);
+      }
+      return match.id;
+    }
     if (!allowHomebrew) throw new Error(`„${value}“ není v katalogu. Vyberte nalezenou položku nebo povolte Homebrew.`);
     const id = createId('def');
-    homebrewDefinitions.push({ id, definitionType: types[0]!, name: value.trim(), description: '', aliases: [] });
+    homebrewDefinitions.push({ id, definitionType: types[0]!, name: value.trim(), description: '', aliases: [], parentDefinitionId });
     return id;
   };
-  const classes = mode === 'quick'
-    ? [{
+  const primaryClassId = resolve(text('className'), ['Class'], true)!;
+  const primaryClass = {
       id: view?.classes[0]?.id ?? createId('class'),
-      classId: resolve(text('className'), ['Class'], true)!,
-      subclassId: null,
+      classId: primaryClassId,
+      subclassId: mode === 'advanced' ? resolve(text('subclass'), ['Subclass'], false, primaryClassId) : null,
       level: integer(text('level'), 1, 20, 'Úroveň'),
-    }]
-    : parseLines(text('classes')).map((line, index) => {
+    };
+  const classes = mode === 'quick'
+    ? [primaryClass]
+    : [primaryClass, ...parseLines(text('additionalClasses')).map((line, index) => {
       const [className, rawLevel, subclassName] = line.split('|').map((part) => part.trim());
+      const classId = resolve(className ?? '', ['Class'], true)!;
       return {
-        id: view?.classes[index]?.id ?? createId('class'),
-        classId: resolve(className ?? '', ['Class'], true)!,
-        subclassId: resolve(subclassName ?? '', ['Subclass']),
+        id: view?.classes[index + 1]?.id ?? createId('class'),
+        classId,
+        subclassId: resolve(subclassName ?? '', ['Subclass'], false, classId),
         level: integer(rawLevel ?? '1', 1, 20, `Úroveň na řádku ${index + 1}`),
       };
-    });
+    })];
   if (!classes.length) throw new Error('Postava musí mít alespoň jedno povolání.');
   const bio = view?.biography ?? { characterId: '', ...emptyBiography() };
   const abilitiesDraft = abilities(view).map(([abilityId, , score]) => ({
@@ -288,6 +310,10 @@ function draftFromForm(
       ritualAvailable: view?.spells[index]?.ritualAvailable ?? false,
       customNotes: view?.spells[index]?.customNotes ?? null,
     })) : view?.spells.map(stripSpell) ?? [];
+  const speciesId = resolve(text('species'), ['Species', 'Race']);
+  const lineageId = mode === 'advanced'
+    ? resolve(text('lineage'), ['Lineage', 'Subrace'], false, speciesId)
+    : view?.origin.lineageId ?? null;
   return {
     campaignId: campaign.id,
     ...(view ? { characterId: view.character.id, baseRevision: view.revision } : {}),
@@ -306,8 +332,8 @@ function draftFromForm(
       bonds: nullable('bonds'), flaws: nullable('flaws'), notes: nullable('notes'),
     } : stripBiography(bio),
     origin: {
-      speciesId: resolve(text('species'), ['Species', 'Race']),
-      lineageId: mode === 'advanced' ? resolve(text('lineage'), ['Lineage', 'Subrace']) : view?.origin.lineageId ?? null,
+      speciesId,
+      lineageId,
       backgroundId: resolve(text('background'), ['Background']),
     },
     classes,
@@ -347,21 +373,48 @@ function definitionField(
   definitions: readonly RuleDefinition[],
   types: readonly string[],
   required = false,
+  parentDefinitionId?: string | null,
 ): string {
   const listId = `catalog-${name}`;
+  const matching = definitions.filter((item) => types.includes(item.definitionType))
+    .filter((item) => parentDefinitionId === undefined || (parentDefinitionId !== null && item.parentDefinitionIds.includes(parentDefinitionId)));
   return `<label class="form-field definition-picker"><span>${escapeHtml(label)}${required ? ' *' : ''}</span>
     <input type="search" name="${escapeHtml(name)}" value="${escapeHtml(value)}" list="${listId}" autocomplete="off"${required ? ' required' : ''}>
-    <datalist id="${listId}">${definitions.filter((item) => types.includes(item.definitionType)).map((item) => (
+    <datalist id="${listId}">${matching.map((item) => (
       `<option value="${escapeHtml(item.name)}">${escapeHtml(item.aliases[0] ?? item.source)}</option>`
-    )).join('')}</datalist></label>`;
+    )).join('')}</datalist>${parentDefinitionId !== undefined ? `<small class="dependent-picker-empty" data-dependent-empty="${escapeHtml(name)}"${matching.length ? ' hidden' : ''}>Pro vybranou nadřazenou položku nejsou definované žádné možnosti.</small>` : ''}</label>`;
+}
+
+function wireDependentPickers(form: HTMLFormElement, definitions: readonly RuleDefinition[], signal: AbortSignal): void {
+  const wire = (parentName: string, childName: string, parentTypes: readonly string[], childTypes: readonly string[]): void => {
+    const parentInput = form.querySelector<HTMLInputElement>(`[name="${parentName}"]`);
+    const childInput = form.querySelector<HTMLInputElement>(`[name="${childName}"]`);
+    const list = form.querySelector<HTMLDataListElement>(`#catalog-${childName}`);
+    const empty = form.querySelector<HTMLElement>(`[data-dependent-empty="${childName}"]`);
+    if (!parentInput || !childInput || !list) return;
+    const update = (clearInvalid: boolean): void => {
+      const normalizedParent = normalize(parentInput.value);
+      const parent = definitions.find((item) => parentTypes.includes(item.definitionType)
+        && [item.name, ...item.aliases, item.id].some((candidate) => normalize(candidate) === normalizedParent));
+      const options = definitions.filter((item) => childTypes.includes(item.definitionType)
+        && Boolean(parent && item.parentDefinitionIds.includes(parent.id)));
+      list.innerHTML = options.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.aliases[0] ?? item.source)}</option>`).join('');
+      if (empty) empty.hidden = options.length > 0;
+      if (clearInvalid && childInput.value.trim() && !options.some((item) => normalize(item.name) === normalize(childInput.value))) childInput.value = '';
+    };
+    parentInput.addEventListener('input', () => update(false), { signal });
+    parentInput.addEventListener('change', () => update(true), { signal });
+  };
+  wire('species', 'lineage', ['Species', 'Race'], ['Lineage', 'Subrace']);
+  wire('className', 'subclass', ['Class'], ['Subclass']);
 }
 
 function definitionName(id: string | null | undefined, definitions: readonly RuleDefinition[]): string {
   return id ? definitions.find((item) => item.id === id)?.name ?? id : '';
 }
 
-function classLines(view: CharacterEditorView | null, definitions: readonly RuleDefinition[]): string {
-  return view?.classes.map((item) => [
+function classLines(view: CharacterEditorView | null, definitions: readonly RuleDefinition[], skip = 0): string {
+  return view?.classes.slice(skip).map((item) => [
     definitionName(item.classId, definitions),
     item.level,
     definitionName(item.subclassId, definitions),

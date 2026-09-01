@@ -23,6 +23,8 @@ import { RulesCatalogService } from './rules/catalog-service';
 import { DataChangeService } from './editable/data-change-service';
 import { CharacterEditorService } from './editable/character-editor-service';
 import { AiDataChangeProposalService } from './ai/data-change-proposal-service';
+import { AppLogService } from './app-log/service';
+import { RulesPackService } from './rules/pack-service';
 
 interface VersionRow {
   user_version: number;
@@ -51,15 +53,19 @@ export class ChronicleDatabase {
   readonly dataChanges: DataChangeService;
   readonly characterEditor: CharacterEditorService;
   readonly aiDataChangeProposals: AiDataChangeProposalService;
+  readonly appLog: AppLogService;
+  readonly rulesPacks: RulesPackService;
   private database: DatabaseSync | undefined;
 
-  private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo) {
+  private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo, userDataDirectory: string) {
     this.database = database;
     this.path = databasePath;
     this.info = info;
     const repository = new SqliteChronicleRepository(database);
     this.rulesets = new RulesetRegistry();
     this.rulesCatalog = new RulesCatalogService(database, this.rulesets);
+    this.appLog = new AppLogService(database);
+    this.rulesPacks = new RulesPackService(database, userDataDirectory, this.appLog);
     this.dataChanges = new DataChangeService(database);
     this.characterEditor = new CharacterEditorService(database, this.dataChanges);
     this.aiDataChangeProposals = new AiDataChangeProposalService(database, this.dataChanges);
@@ -118,12 +124,14 @@ export class ChronicleDatabase {
       applyMigrations(database, pending);
       const campaignCount = readCampaignCount(database);
 
-      return new ChronicleDatabase(database, databasePath, {
+      const chronicle = new ChronicleDatabase(database, databasePath, {
         databasePath,
         schemaVersion: readSchemaVersion(database),
         campaignCount,
         backupCreated,
-      });
+      }, userDataDirectory);
+      await chronicle.rulesPacks.bootstrap();
+      return chronicle;
     } catch (error) {
       database.close();
       throw error;

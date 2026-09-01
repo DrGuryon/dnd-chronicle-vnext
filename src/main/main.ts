@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
 import electronLog from 'electron-log/main';
 import path from 'node:path';
+import { writeFile } from 'node:fs/promises';
 import { ChronicleDatabase } from './database';
 import { ChronicleIpcService } from './ipc/chronicle-ipc-service';
 import { UpdateController } from './updater';
@@ -10,6 +11,7 @@ import { AiSecretStore } from './ai/secret-store';
 import { AiTurnService } from './ai/turn-service';
 import { OpenAiProvider } from './ai/openai-provider';
 import { ChronicleEngineError } from './engine/service';
+import type { AppLogEntry, AppLogExportFormat, AppLogQuery } from '../shared/app-log';
 
 let mainWindow: BrowserWindow | null = null;
 let chronicleDatabase: ChronicleDatabase | undefined;
@@ -65,7 +67,10 @@ app.whenReady().then(async () => {
     }
 
     createWindow();
-    updateController = new UpdateController(() => mainWindow);
+    updateController = new UpdateController(
+      () => mainWindow,
+      (entry) => { chronicleDatabase?.appLog.write(entry); },
+    );
     registerIpc();
 
     if (updateController.getState().status === 'idle') {
@@ -182,6 +187,23 @@ function registerIpc(): void {
   handle('rules:get-reconciliation-suggestions', (query) => chronicle.getRuleReconciliationSuggestions(query));
   handle('rules:apply-reconciliation', (suggestion) => chronicle.applyRuleReconciliation(suggestion));
   handle('data-change:list-audit', (campaignId) => chronicle.getDataChangeAudit(campaignId));
+  handle('app-log:query', (query) => chronicle.queryAppLog(query));
+  handle('app-log:clear', () => chronicle.clearAppLog());
+  ipcMain.handle('app-log:export', async (_event, value: unknown) => {
+    const request = value && typeof value === 'object' ? value as { format?: unknown; query?: unknown } : {};
+    const format: AppLogExportFormat = request.format === 'txt' ? 'txt' : 'json';
+    const query = request.query && typeof request.query === 'object' ? request.query as AppLogQuery : {};
+    const entries = chronicleDatabase!.appLog.export(query);
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Exportovat aplikační log', defaultPath: `dnd-chronicle-log-${new Date().toISOString().slice(0, 10)}.${format}`,
+      filters: [{ name: format === 'json' ? 'JSON' : 'Text', extensions: [format] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, formatLog(entries, format), 'utf8');
+    return result.filePath;
+  });
+  handle('rules-packs:list', () => chronicle.listRulesPacks());
+  ipcMain.handle('rules-packs:update', (_event, packId: unknown) => chronicle.updateRulesPacks(packId));
   handle('ai:get-settings', (campaignId) => chronicle.getAiSettings(campaignId));
   handle('ai:save-settings', (command) => chronicle.saveAiSettings(command));
   handle('ai:list-pending-proposals', (campaignId) => chronicle.listPendingAiProposals(campaignId));
@@ -251,4 +273,12 @@ function closeDatabase(): void {
   }
   databaseClosed = true;
   chronicleDatabase?.close();
+}
+
+function formatLog(entries: readonly AppLogEntry[], format: AppLogExportFormat): string {
+  if (format === 'json') return `${JSON.stringify({ exportedAt: new Date().toISOString(), entries }, null, 2)}\n`;
+  return `${entries.map((entry) => [
+    entry.createdAt, entry.severity.toUpperCase(), entry.category, entry.campaignId ?? '-', entry.event,
+    entry.message, entry.details ? JSON.stringify(entry.details) : '',
+  ].join('\t')).join('\n')}\n`;
 }

@@ -1,7 +1,7 @@
 import type { CampaignAiSettings } from '../../shared/ai';
 import type { SceneContextView } from '../../shared/chronicle-engine';
 
-export const AI_PROMPT_VERSION = 'chronicle-v8.0';
+export const AI_PROMPT_VERSION = 'chronicle-v9.0';
 
 export function buildChronicleInstructions(
   scene: SceneContextView,
@@ -16,6 +16,9 @@ export function buildChronicleInstructions(
     'Use chronicle_propose_turn_transaction only for events in the current fictional world: damage, movement, effects, relationships and knowledge learned during play.',
     'Use chronicle_propose_data_changes only when the user explicitly asks to edit permanent profile or canonical setup data such as identity, biography, origin, class, abilities, proficiencies, languages, features, spells or notes.',
     'Before proposing a canonical reference, find its real ID with chronicle_search_rule_definitions. Never invent an existing entity or definition ID.',
+    'Plan reads before calling tools. Reuse facts already returned in this turn and never repeat an identical read.',
+    'Prefer chronicle_search_rule_definitions_batch for several catalog lookups, chronicle_get_entities_context for several known entities, and chronicle_get_character_edit_context before a broad character edit.',
+    'Independent read tools may run in parallel. Keep proposal calls sequential, group one coherent edit into one proposal, and avoid tiny fragmented proposals.',
     'Both proposal tools only validate. They never commit; you have no database-write tool.',
     'Propose actorRelationship.upsert only for a meaningful relationship development.',
     'Do not output private chain-of-thought. A short user-facing explanation is fine.',

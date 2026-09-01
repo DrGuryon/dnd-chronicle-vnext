@@ -5,6 +5,7 @@ import type { AppUpdater } from 'electron-updater';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { UpdateState } from '../shared/contracts';
+import type { AppLogWrite } from '../shared/app-log';
 
 const { autoUpdater } = electronUpdater;
 
@@ -12,7 +13,10 @@ export class UpdateController {
   private readonly updater: AppUpdater;
   private state: UpdateState;
 
-  constructor(private readonly windowProvider: () => BrowserWindow | null) {
+  constructor(
+    private readonly windowProvider: () => BrowserWindow | null,
+    private readonly log: (entry: AppLogWrite) => void = () => undefined,
+  ) {
     this.updater = autoUpdater;
     this.state = this.hasReleaseFeed()
       ? { status: 'idle', message: 'Aktualizace jsou připravené ke kontrole.' }
@@ -97,7 +101,16 @@ export class UpdateController {
   }
 
   private setState(state: UpdateState): UpdateState {
+    const previousStatus = this.state.status;
     this.state = state;
+    if (state.status !== previousStatus) {
+      this.log({
+        severity: state.status === 'error' ? 'error'
+          : state.status === 'downloaded' || state.status === 'up-to-date' ? 'success' : 'info',
+        category: 'updater', event: `updater.${state.status}`, message: state.message,
+        details: { availableVersion: state.availableVersion, percent: state.percent },
+      });
+    }
     const window = this.windowProvider();
     if (window && !window.isDestroyed()) {
       window.webContents.send('updater:state-changed', state);

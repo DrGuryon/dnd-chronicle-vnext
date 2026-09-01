@@ -52,6 +52,7 @@ export interface RuleDefinition {
   packVersion: string;
   locale: string;
   builtIn: boolean;
+  parentDefinitionIds: readonly string[];
   metadata: Readonly<Record<string, unknown>> | null;
   homebrew: boolean;
   createdAt: string;

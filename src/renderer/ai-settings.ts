@@ -4,6 +4,8 @@ import { aiReasoningEffortsForModel, normalizeAiReasoningEffort } from '../share
 import type { RuntimeWorkspaceCampaign } from '../shared/chronicle-engine';
 import { errorMessage, escapeHtml, humanize } from './html';
 import { updateCard } from './views/overview';
+import type { RulesPackStatus } from '../shared/rules-packs';
+import type { ToastType } from './toast-service';
 
 export class AiSettingsController {
   private campaigns: readonly RuntimeWorkspaceCampaign[] = [];
@@ -12,7 +14,10 @@ export class AiSettingsController {
   private update: UpdateState | null = null;
   private message = '';
 
-  constructor(private readonly root: HTMLElement) {
+  constructor(
+    private readonly root: HTMLElement,
+    private readonly notify: (message: string, type?: ToastType) => void = () => undefined,
+  ) {
     root.addEventListener('change', (event) => void this.onChange(event));
     root.addEventListener('click', (event) => void this.onClick(event));
     root.addEventListener('submit', (event) => void this.onSubmit(event));
@@ -35,17 +40,18 @@ export class AiSettingsController {
 
   private async refresh(): Promise<void> {
     try {
-      const [secret, settings] = await Promise.all([
+      const [secret, settings, rulesPacks] = await Promise.all([
         window.chronicle.getAiSecretStatus(),
         this.campaignId ? window.chronicle.getAiSettings(this.campaignId) : Promise.resolve(null),
+        window.chronicle.listRulesPacks(),
       ]);
-      this.render(secret, settings);
+      this.render(secret, settings, rulesPacks);
     } catch (error) {
       this.root.innerHTML = `<div class="view-scroll"><p class="dialog-error">${escapeHtml(errorMessage(error))}</p></div>`;
     }
   }
 
-  private render(secret: AiSecretStatus, settings: CampaignAiSettings | null): void {
+  private render(secret: AiSecretStatus, settings: CampaignAiSettings | null, rulesPacks: readonly RulesPackStatus[]): void {
     const info = this.info!;
     const update = this.update!;
     this.root.innerHTML = `<div class="view-scroll settings-view">
@@ -66,6 +72,14 @@ export class AiSettingsController {
           <button type="button" class="primary-button" data-action="create-campaign">Vytvořit kampaň</button></div>`}
       </section>
       <section class="settings-section"><header><div><p>AKTUALIZACE</p><h2>Verze aplikace</h2></div></header>${updateCard(update)}</section>
+      <section class="settings-section"><header><div><p>PRAVIDLA · OFFLINE</p><h2>Balíčky pravidel</h2></div>
+        <button type="button" data-settings-action="update-packs">Ověřit všechny</button></header>
+        <p class="settings-description">Balíčky se aktualizují odděleně od aplikace, před aktivací se kontroluje schéma, odkazy a kontrolní součet. Při chybě zůstane aktivní předchozí verze.</p>
+        <div class="rules-pack-list">${rulesPacks.map((pack) => `<article><div><strong>${escapeHtml(pack.displayName)}</strong>
+          <span>${escapeHtml(pack.packId)} · ${escapeHtml(pack.version)} · ${pack.active ? 'aktivní' : 'neaktivní'}</span>
+          <small>${escapeHtml(pack.license)} · ${escapeHtml(pack.attribution)}</small></div>
+          <button type="button" data-settings-action="update-pack" data-pack-id="${escapeHtml(pack.packId)}">Ověřit</button></article>`).join('')}</div>
+      </section>
       <section class="settings-section diagnostics"><header><div><p>ÚLOŽIŠTĚ / DIAGNOSTIKA</p><h2>Lokální data</h2></div></header>
         <dl><div><dt>Verze aplikace</dt><dd>${escapeHtml(info.appVersion)}</dd></div>
           <div><dt>Schéma databáze</dt><dd>v${info.storage.schemaVersion}</dd></div>
@@ -98,9 +112,15 @@ export class AiSettingsController {
         if (!this.campaignId) throw new Error('Nejdřív vyberte kampaň.');
         const result = await window.chronicle.testAiRuntime(this.campaignId);
         this.message = result.message;
+      } else if (button.dataset.settingsAction === 'update-packs' || button.dataset.settingsAction === 'update-pack') {
+        const results = await window.chronicle.updateRulesPacks(button.dataset.packId || undefined);
+        const changed = results.filter((result) => result.changed).length;
+        this.message = changed ? `Aktualizováno balíčků: ${changed}.` : 'Balíčky pravidel jsou v pořádku a aktuální.';
       }
+      this.notify(this.message, 'success');
     } catch (error) {
       this.message = errorMessage(error);
+      this.notify(this.message, 'error');
     }
     await this.refresh();
   }
@@ -129,8 +149,10 @@ export class AiSettingsController {
         });
         this.message = 'Nastavení kampaně bylo uloženo.';
       }
+      this.notify(this.message, 'success');
     } catch (error) {
       this.message = errorMessage(error);
+      this.notify(this.message, 'error');
     }
     await this.refresh();
   }
