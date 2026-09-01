@@ -326,6 +326,70 @@ describe('ChronicleDatabase', () => {
     }
   });
 
+  it('migrates a historical version 7 catalog that does not contain newly related definitions', async () => {
+    const userData = await createTemporaryDirectory();
+    const dataDirectory = path.join(userData, 'data');
+    await mkdir(dataDirectory, { recursive: true });
+    const databasePath = path.join(dataDirectory, 'chronicle.db');
+    const database = new DatabaseSync(databasePath);
+    database.function('chronicle_normalize', (value: unknown) => String(value ?? '').toLowerCase());
+    database.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      ) STRICT;
+    `);
+    for (const migration of migrations.filter((candidate) => candidate.version <= 7)) {
+      migration.up(database);
+      database.prepare('INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)')
+        .run(migration.version, migration.name, '2026-01-01T00:00:00.000Z');
+      database.exec(`PRAGMA user_version = ${migration.version};`);
+    }
+    database.exec(`
+      DROP TRIGGER rule_definitions_builtin_delete;
+      DELETE FROM rule_definitions WHERE canonical_id LIKE '%:Subclass:oath-of-devotion';
+      CREATE TRIGGER rule_definitions_builtin_delete
+      BEFORE DELETE ON rule_definitions WHEN old.is_builtin = 1 BEGIN
+        SELECT RAISE(ABORT, 'Vestavěnou definici nelze odstranit.');
+      END;
+      INSERT INTO campaigns(id, name, created_at, updated_at, ruleset_id, ruleset_version)
+      VALUES (
+        'campaign-v7', 'Version seven',
+        '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z',
+        'dnd5e', '2024'
+      );
+    `);
+    expect(database.prepare(`
+      SELECT COUNT(*) AS count FROM rule_definitions
+      WHERE canonical_id LIKE '%:Subclass:oath-of-devotion'
+    `).get()).toMatchObject({ count: 0 });
+    database.close();
+
+    const migrated = await ChronicleDatabase.open(userData);
+    try {
+      expect(migrated.info).toMatchObject({ schemaVersion: 8, campaignCount: 1 });
+      expect(migrated.info.backupCreated).toBeDefined();
+      expect(migrated.domain.getCampaign('campaign-v7')?.name).toBe('Version seven');
+    } finally {
+      migrated.close();
+    }
+
+    const inspected = new DatabaseSync(databasePath);
+    expect(inspected.prepare(`
+      SELECT COUNT(*) AS count FROM rule_definitions
+      WHERE canonical_id LIKE '%:Subclass:oath-of-devotion'
+    `).get()).toMatchObject({ count: 2 });
+    expect(inspected.prepare(`
+      SELECT COUNT(*) AS count FROM rule_definition_relations
+      WHERE relation_type = 'belongsToClass'
+        AND source_definition_id LIKE '%subclass_oath_of_devotion'
+    `).get()).toMatchObject({ count: 2 });
+    expect(inspected.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    inspected.close();
+  });
+
   it('rejects a database created by a newer application', async () => {
     const userData = await createTemporaryDirectory();
     const dataDirectory = path.join(userData, 'data');

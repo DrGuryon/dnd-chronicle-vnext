@@ -1089,6 +1089,10 @@ export const migrations: readonly Migration[] = [
           SELECT RAISE(ABORT, 'Vestavěnou definici nelze odstranit.');
         END;
       `);
+      // Databases created by 0.8.0 do not contain definitions added alongside
+      // the v8 relation catalog. Seed missing stable IDs before their foreign
+      // key-backed relations; INSERT OR IGNORE preserves every existing row.
+      seedBuiltInRuleDefinitions(database);
       seedBuiltInRuleRelations(database);
     },
   },
