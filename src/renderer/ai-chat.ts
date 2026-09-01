@@ -1,4 +1,5 @@
-import type { AiTurnClientEvent, PendingTurnProposal } from '../shared/ai';
+import type { PendingAiProposal, AiTurnClientEvent, PendingTurnProposal } from '../shared/ai';
+import type { DataChange } from '../shared/editable-domain';
 import type { ConversationMessage, RuntimeWorkspaceCampaign } from '../shared/chronicle-engine';
 import { errorMessage, escapeHtml, humanize } from './html';
 
@@ -14,7 +15,7 @@ export class AiChatController {
   private activeCharacterId: string | null = null;
   private keyConfigured = false;
   private messages: ConversationMessage[] = [];
-  private proposals: PendingTurnProposal[] = [];
+  private proposals: PendingAiProposal[] = [];
   private runId: string | null = null;
   private starting = false;
   private lastSettledRunId: string | null = null;
@@ -304,12 +305,49 @@ function messageRow(message: ConversationMessage): string {
   return `<article class="chat-message is-${message.role}"><span>${message.role === 'user' ? 'Vy' : 'Chronicle'}</span><div>${renderMarkdown(message.content)}</div></article>`;
 }
 
-function proposalCard(proposal: PendingTurnProposal): string {
+function proposalCard(proposal: PendingAiProposal): string {
   if (proposal.status !== 'pending') return '';
-  return `<section class="proposal-card"><header><span>Navržené změny</span><strong>${escapeHtml(proposal.transaction.event.summary)}</strong></header>
-    <ul>${proposal.transaction.changes.map((change) => `<li>${escapeHtml(changeSummary(change))}</li>`).join('')}</ul>
+  const summary = proposal.kind === 'turn' ? proposal.transaction.event.summary : proposal.transaction.summary;
+  const changes = proposal.kind === 'turn'
+    ? proposal.transaction.changes.map(changeSummary)
+    : proposal.transaction.changes.map(dataChangeSummary);
+  return `<section class="proposal-card"><header><span>${proposal.kind === 'turn' ? 'Navržené změny světa' : 'Navržené úpravy dat'}</span><strong>${escapeHtml(summary)}</strong></header>
+    <ul>${changes.map((change) => `<li>${escapeHtml(change)}</li>`).join('')}</ul>
     <div><button type="button" data-chat-action="reject" data-proposal-id="${escapeHtml(proposal.id)}">Zamítnout</button>
       <button type="button" data-chat-action="apply" data-proposal-id="${escapeHtml(proposal.id)}">Použít</button></div></section>`;
+}
+
+function dataChangeSummary(change: DataChange): string {
+  switch (change.type) {
+    case 'character.create': return `Vytvořit postavu ${change.name}`;
+    case 'character.identity.set': return `Identita: ${change.name}${change.fullName ? ` (${change.fullName})` : ''}`;
+    case 'character.biography.set': return 'Upravit biografii, vzhled a osobnost';
+    case 'character.origin.set': return 'Upravit druh, původ a zázemí';
+    case 'character.class.add': return `Přidat povolání na úrovni ${change.level}`;
+    case 'character.class.update': return `Upravit povolání na úroveň ${change.level}`;
+    case 'character.class.remove': return 'Odebrat povolání';
+    case 'character.ability.set': return `${humanize(change.abilityId)}: ${change.baseScore}`;
+    case 'character.proficiency.add': return `Přidat zdatnost ${change.customTarget ?? change.targetDefinitionId ?? ''}`;
+    case 'character.proficiency.update': return `Upravit zdatnost ${change.customTarget ?? change.targetDefinitionId ?? ''}`;
+    case 'character.proficiency.remove': return 'Odebrat zdatnost';
+    case 'character.language.add': return `Přidat jazyk ${change.customLanguage ?? change.languageDefinitionId ?? ''}`;
+    case 'character.language.update': return `Upravit jazyk ${change.customLanguage ?? change.languageDefinitionId ?? ''}`;
+    case 'character.language.remove': return 'Odebrat jazyk';
+    case 'character.feature.add': return `Přidat schopnost ${change.customName ?? change.definitionId ?? ''}`;
+    case 'character.feature.update': return `Upravit schopnost ${change.customName ?? change.definitionId ?? ''}`;
+    case 'character.feature.remove': return 'Odebrat schopnost';
+    case 'character.spellcastingSource.add': return `Přidat zdroj sesílání (${humanize(change.abilityId)})`;
+    case 'character.spellcastingSource.update': return `Upravit zdroj sesílání (${humanize(change.abilityId)})`;
+    case 'character.spellcastingSource.remove': return 'Odebrat zdroj sesílání';
+    case 'character.spell.add': return `Přidat kouzlo ${change.spellId}`;
+    case 'character.spell.update': return `Upravit kouzlo ${change.spellId}`;
+    case 'character.spell.remove': return 'Odebrat kouzlo';
+    case 'character.notes.replace': return 'Nahradit poznámky';
+    case 'character.notes.append': return 'Připojit poznámku';
+    case 'ruleDefinition.homebrew.create': return `Vytvořit Homebrew definici ${change.name}`;
+    case 'ruleDefinition.homebrew.update': return `Upravit Homebrew definici ${change.name}`;
+    case 'ruleReference.reassign': return `Spárovat ${change.category} s kanonickou definicí`;
+  }
 }
 
 function changeSummary(change: PendingTurnProposal['transaction']['changes'][number]): string {

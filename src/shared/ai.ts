@@ -1,12 +1,18 @@
 import type { ApprovalPolicy, ChronicleToolDescriptor, TurnTransaction, TurnValidationResult } from './chronicle-engine';
 import type { TurnTransactionResult } from './chronicle-engine';
+import type {
+  DataChangeTransaction,
+  DataChangeTransactionResult,
+  DataChangeValidationResult,
+  PendingDataChangeProposal,
+} from './editable-domain';
 
 export type AiProviderId = 'openai' | 'fake';
-export type AiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type AiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type AiVerbosity = 'low' | 'medium' | 'high';
 
 const standardReasoningEfforts = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
-const gpt56ReasoningEfforts = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
+const gpt56ReasoningEfforts = ['none', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 export function normalizeAiReasoningEffort(
   modelId: string,
@@ -103,11 +109,12 @@ export interface AiTurnRequest {
 }
 
 export interface AiProposalApplyResult {
-  proposal: PendingTurnProposal;
-  result: TurnTransactionResult;
+  proposal: PendingAiProposal;
+  result: TurnTransactionResult | DataChangeTransactionResult;
 }
 
 export interface PendingTurnProposal {
+  kind: 'turn';
   id: string;
   turnRunId: string;
   campaignId: string;
@@ -120,11 +127,13 @@ export interface PendingTurnProposal {
   appliedEventId: string | null;
 }
 
+export type PendingAiProposal = PendingTurnProposal | PendingDataChangeProposal;
+
 export type AiTurnClientEvent =
   | { type: 'started'; runId: string; conversationId: string; userMessageId: string }
   | { type: 'text-delta'; runId: string; delta: string }
   | { type: 'tool-status'; runId: string; name: string; status: 'running' | 'completed' }
-  | { type: 'proposal'; runId: string; proposal: PendingTurnProposal }
-  | { type: 'completed'; runId: string; assistantMessageId: string; proposal: PendingTurnProposal | null }
+  | { type: 'proposal'; runId: string; proposal: PendingAiProposal }
+  | { type: 'completed'; runId: string; assistantMessageId: string; proposal: PendingAiProposal | null }
   | { type: 'failed'; runId: string; userMessageId: string; code: string; message: string }
   | { type: 'cancelled'; runId: string };

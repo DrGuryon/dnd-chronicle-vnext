@@ -33,6 +33,7 @@ export function renderPlayChrome(
   ${prerequisite === 'conversation' ? `<section class="prerequisite-banner"><div><strong>Vytvořte první konverzaci.</strong><span>Konverzace uchovává zprávy vaší scény.</span></div><button type="button" data-action="create-conversation">Nová konverzace</button></section>` : ''}
   <div class="play-secondary-actions">
     ${campaign.runtime.activePlayerCharacterId ? '<button type="button" data-action="edit-character">Upravit postavu</button>' : ''}
+    <button type="button" data-action="create-character-advanced">Rozšířená tvorba postavy</button>
     ${campaign.runtime.activeConversationId ? '<button type="button" data-action="rename-conversation">Přejmenovat konverzaci</button>' : ''}
     <button type="button" data-action="open-settings">Nastavení AI</button>
   </div>`;

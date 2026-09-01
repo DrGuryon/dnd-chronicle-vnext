@@ -14,7 +14,7 @@ SQLite je lokální source of truth. Soubor je v `app.getPath('userData')/data/c
 
 Schéma používá monotónní `PRAGMA user_version` a auditní tabulku `schema_migrations`. Migrace běží v `BEGIN IMMEDIATE` transakci. Aplikace odmítne otevřít databázi s novějším schématem, aby downgrade nepoškodil data. Před každým skutečným upgradem existující databáze vytvoří SQLite backup do `userData/backups`.
 
-Schéma v3 rozšířilo storage o praktický Character model, v4 přidalo izolované UI preference a v5 Chronicle Engine, Conversations, Knowledge visibility, Turn Transactions a FTS5. Schéma v6 přidává `campaign_ai_settings`, auditní `ai_turn_runs`, pending proposals a actor relationship profiles s Event referencemi. Databáze v1–v5 postupují stejným monotónním runnerem do v6 a před upgradem vždy vznikne konzistentní backup.
+Schéma v3 rozšířilo storage o praktický Character model, v4 přidalo izolované UI preference a v5 Chronicle Engine, Conversations, Knowledge visibility, Turn Transactions a FTS5. Schéma v6 přidalo `campaign_ai_settings`, auditní `ai_turn_runs`, pending proposals a actor relationship profiles s Event referencemi. Schéma v7 doplňuje verzovaný ruleset registr, vestavěný katalog pravidel, revize entit, atomické DataChange transakce, audit změn, AI návrhy datových změn a explicitní reconciliaci homebrew referencí. Databáze v1–v6 postupují stejným monotónním runnerem do v7 a před upgradem vždy vznikne konzistentní backup.
 
 ## Chronicle Engine boundary
 

@@ -18,6 +18,11 @@ import { ActorRelationshipService } from './relationships/service';
 import { CampaignAiSettingsService } from './ai/settings-service';
 import { AiProposalService } from './ai/proposal-service';
 import { AiTurnRunStore } from './ai/run-store';
+import { RulesetRegistry } from '../rules/registry';
+import { RulesCatalogService } from './rules/catalog-service';
+import { DataChangeService } from './editable/data-change-service';
+import { CharacterEditorService } from './editable/character-editor-service';
+import { AiDataChangeProposalService } from './ai/data-change-proposal-service';
 
 interface VersionRow {
   user_version: number;
@@ -41,6 +46,11 @@ export class ChronicleDatabase {
   readonly aiSettings: CampaignAiSettingsService;
   readonly aiProposals: AiProposalService;
   readonly aiRuns: AiTurnRunStore;
+  readonly rulesets: RulesetRegistry;
+  readonly rulesCatalog: RulesCatalogService;
+  readonly dataChanges: DataChangeService;
+  readonly characterEditor: CharacterEditorService;
+  readonly aiDataChangeProposals: AiDataChangeProposalService;
   private database: DatabaseSync | undefined;
 
   private constructor(database: DatabaseSync, databasePath: string, info: StorageInfo) {
@@ -48,6 +58,11 @@ export class ChronicleDatabase {
     this.path = databasePath;
     this.info = info;
     const repository = new SqliteChronicleRepository(database);
+    this.rulesets = new RulesetRegistry();
+    this.rulesCatalog = new RulesCatalogService(database, this.rulesets);
+    this.dataChanges = new DataChangeService(database);
+    this.characterEditor = new CharacterEditorService(database, this.dataChanges);
+    this.aiDataChangeProposals = new AiDataChangeProposalService(database, this.dataChanges);
     this.domain = new ChronicleDomainService(repository);
     this.characters = new CharacterDomainService(
       new SqliteCharacterRepository(database),

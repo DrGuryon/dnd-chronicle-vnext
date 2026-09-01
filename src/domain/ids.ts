@@ -8,6 +8,7 @@ export type DomainIdPrefix =
   | 'char'
   | 'choice'
   | 'class'
+  | 'change'
   | 'conversation'
   | 'message'
   | 'creature'

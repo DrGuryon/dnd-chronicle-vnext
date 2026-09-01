@@ -1,11 +1,17 @@
 import type { EntityCardRequest, EntityCardView, EntitySummary } from '../shared/read-models';
 import { entityReference, errorMessage, escapeHtml, humanize } from './html';
 
+interface EntityCardActions {
+  editCharacter?(characterId: string): void;
+  editHomebrewDefinition?(definition: Extract<EntityCardView, { cardType: 'definition' }>): void;
+}
+
 export class EntityCardHost {
   private readonly stack: EntityCardRequest[] = [];
   private returnFocus: HTMLElement | null = null;
+  private currentCard: EntityCardView | null = null;
 
-  constructor(private readonly dialog: HTMLDialogElement) {
+  constructor(private readonly dialog: HTMLDialogElement, private readonly actions: EntityCardActions = {}) {
     document.addEventListener('click', (event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>('[data-entity-id]');
       if (!target) return;
@@ -22,6 +28,16 @@ export class EntityCardHost {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-card-action]');
       if (!button) return;
       if (button.dataset.cardAction === 'close') this.dialog.close();
+      if (button.dataset.cardAction === 'edit-character' && this.currentCard?.cardType === 'character') {
+        const characterId = this.currentCard.id;
+        this.dialog.close();
+        this.actions.editCharacter?.(characterId);
+      }
+      if (button.dataset.cardAction === 'edit-homebrew' && this.currentCard?.cardType === 'definition' && this.currentCard.homebrew) {
+        const definition = this.currentCard;
+        this.dialog.close();
+        this.actions.editHomebrewDefinition?.(definition);
+      }
       if (button.dataset.cardAction === 'back' && this.stack.length > 1) {
         this.stack.pop();
         void this.load(this.stack.at(-1)!);
@@ -29,6 +45,7 @@ export class EntityCardHost {
     });
     this.dialog.addEventListener('close', () => {
       this.stack.length = 0;
+      this.currentCard = null;
       this.returnFocus?.focus();
       this.returnFocus = null;
     });
@@ -45,10 +62,12 @@ export class EntityCardHost {
   }
 
   private async load(request: EntityCardRequest): Promise<void> {
+    this.currentCard = null;
     this.dialog.setAttribute('aria-busy', 'true');
     this.dialog.innerHTML = cardShell('<div class="card-loading">Načítám kartu…</div>', this.stack.length > 1);
     try {
       const card = await window.chronicle.getEntityCard(request);
+      this.currentCard = card;
       this.dialog.innerHTML = cardShell(renderCard(card), this.stack.length > 1);
       this.dialog.querySelector<HTMLElement>('[data-card-heading]')?.focus();
     } catch (error) {
@@ -86,6 +105,7 @@ function renderCard(card: EntityCardView): string {
     <article class="entity-card">
       <p class="card-kind">${badges.map((badge) => `<span>${escapeHtml(badge)}</span>`).join('')}</p>
       <h2 tabindex="-1" data-card-heading>${escapeHtml(card.name)}</h2>
+      ${cardActions(card)}
       ${card.description
         ? `<p class="card-description">${escapeHtml(card.description)}</p>`
         : '<p class="card-description is-muted">Bez popisu.</p>'}
@@ -107,6 +127,16 @@ function renderCard(card: EntityCardView): string {
       ` : ''}
     </article>
   `;
+}
+
+function cardActions(card: EntityCardView): string {
+  if (card.cardType === 'character') {
+    return '<p class="card-edit-actions"><button type="button" data-card-action="edit-character">Upravit postavu</button></p>';
+  }
+  if (card.cardType === 'definition' && card.homebrew) {
+    return '<p class="card-edit-actions"><button type="button" data-card-action="edit-homebrew">Upravit Homebrew</button></p>';
+  }
+  return '';
 }
 
 function cardFacts(card: EntityCardView): Array<[string, string]> {

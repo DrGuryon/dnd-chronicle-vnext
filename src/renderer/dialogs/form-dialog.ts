@@ -44,13 +44,14 @@ export class FormDialog {
 
     return new Promise<T | null>((resolve) => {
       let settled = false;
+      let submitted = false;
+      let submittedResult: T | null = null;
       const finish = (value: T | null): void => {
         if (settled) return;
         settled = true;
         resolve(value);
       };
       const close = (): void => {
-        finish(null);
         this.dialog.close();
       };
       this.dialog.addEventListener('cancel', (event) => {
@@ -58,7 +59,7 @@ export class FormDialog {
         close();
       }, { once: true });
       this.dialog.addEventListener('close', () => {
-        finish(null);
+        finish(submitted ? submittedResult : null);
         this.returnFocus?.focus();
         this.returnFocus = null;
       }, { once: true });
@@ -82,7 +83,8 @@ export class FormDialog {
         submit.textContent = 'Pracuji…';
         try {
           const result = await request.submit(values);
-          finish(result);
+          submitted = true;
+          submittedResult = result;
           this.dialog.close();
         } catch (error) {
           const message = form.querySelector<HTMLElement>('[data-dialog-error]')!;

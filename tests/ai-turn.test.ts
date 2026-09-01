@@ -230,7 +230,7 @@ describe('Milestone 6 AI turn runtime', () => {
       maxOutputTokens: settings.maxOutputTokens,
       input: [{ role: 'user', content: 'Reply with exactly OK. Do not call tools.' }],
     });
-    expect(inspectedInputs[0].tools).toHaveLength(13);
+    expect(inspectedInputs[0].tools).toHaveLength(15);
     expect(inspectedInputs[0].tools.map((tool) => tool.name)).toContain('chronicle.propose_turn_transaction');
     expect(database.engine.listConversationMessages(fixture.conversationId, { maxResults: 100 }).items).toHaveLength(beforeMessages);
     expect(database.domain.listEvents(fixture.campaignId)).toHaveLength(beforeEvents);

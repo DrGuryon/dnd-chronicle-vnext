@@ -6,14 +6,23 @@ import type {
   AiTurnRequest,
   AiUsage,
   CampaignAiSettings,
-  PendingTurnProposal,
+  PendingAiProposal,
 } from '../../shared/ai';
 import type { ProposedTurnTransaction } from '../../shared/chronicle-engine';
 import type { TurnTransaction, TurnValidationResult } from '../../shared/chronicle-engine';
+import type {
+  DataChangeTransaction,
+  DataChangeValidationResult,
+  ProposedDataChangeTransaction,
+} from '../../shared/editable-domain';
 import { ChronicleDatabase } from '../database';
 import { ChronicleEngineError } from '../engine/service';
 import { AI_PROMPT_VERSION, buildChronicleInstructions } from './prompt-builder';
-import { proposalToolDescriptor } from './tool-schemas';
+import {
+  dataChangeProposalToolDescriptor,
+  proposalToolDescriptor,
+  ruleDefinitionSearchToolDescriptor,
+} from './tool-schemas';
 
 export type AiProviderResolver = (settings: CampaignAiSettings) => Promise<AiProvider>;
 
@@ -78,11 +87,19 @@ export class AiTurnService {
         maxResults: 30,
         maxCharacters: 40_000,
       }).items.reverse().filter((message) => message.role === 'user' || message.role === 'assistant');
-      let latestValid: { transaction: TurnTransaction; validation: TurnValidationResult } | null = null;
+      let latestValid: (
+        | { kind: 'turn'; transaction: TurnTransaction; validation: TurnValidationResult }
+        | { kind: 'data'; transaction: DataChangeTransaction; validation: DataChangeValidationResult }
+      ) | null = null;
       let fullText = '';
       let providerResponseId: string | null = null;
       let usage = emptyUsage();
-      const tools = [...this.database.engine.listToolDescriptors(), proposalToolDescriptor()];
+      const tools = [
+        ...this.database.engine.listToolDescriptors(),
+        ruleDefinitionSearchToolDescriptor(),
+        proposalToolDescriptor(),
+        dataChangeProposalToolDescriptor(),
+      ];
       for await (const event of provider.runTurn({
         modelId: settings.modelId,
         reasoningEffort: settings.reasoningEffort,
@@ -99,7 +116,7 @@ export class AiTurnService {
               sourceMessageId: userMessage.id,
               proposal: proposalValue(call.arguments),
             });
-            if (candidate.validation.valid) latestValid = candidate;
+            if (candidate.validation.valid) latestValid = { kind: 'turn', ...candidate };
             return {
               output: {
                 valid: candidate.validation.valid,
@@ -109,6 +126,40 @@ export class AiTurnService {
               },
               truncated: false,
             };
+          }
+          if (call.name === 'chronicle.propose_data_changes') {
+            const candidate = this.database.aiDataChangeProposals.buildAndValidate({
+              campaignId: request.campaignId,
+              conversationId: request.conversationId,
+              sourceMessageId: userMessage.id,
+              runId,
+              proposal: dataProposalValue(call.arguments),
+            });
+            if (candidate.validation.valid) latestValid = { kind: 'data', ...candidate };
+            return {
+              output: {
+                valid: candidate.validation.valid,
+                errors: candidate.validation.errors,
+                warnings: candidate.validation.warnings,
+                normalizedProposal: candidate.validation.valid ? candidate.transaction : null,
+              },
+              truncated: false,
+            };
+          }
+          if (call.name === 'chronicle.search_rule_definitions') {
+            const query = ruleSearchValue(call.arguments, request.campaignId);
+            const campaign = this.database.domain.getCampaign(request.campaignId)!;
+            const output = this.database.rulesCatalog.search({
+              campaignId: request.campaignId,
+              rulesetId: campaign.rulesetId,
+              rulesetVersion: campaign.rulesetVersion,
+              definitionTypes: query.definitionTypes,
+              query: query.query,
+              includeHomebrew: query.includeHomebrew,
+              includeBuiltIn: true,
+              limit: query.limit ?? 60,
+            });
+            return { output, truncated: output.truncated };
           }
           const output = this.database.orchestrator.executeTool(call.name, call.arguments);
           return { output, truncated: isTruncated(output) };
@@ -136,19 +187,25 @@ export class AiTurnService {
         role: 'assistant',
         content: fullText.trim() || 'Tah byl zpracován bez textové odpovědi.',
       });
-      let savedProposal: PendingTurnProposal | null = null;
-      const finalProposal = latestValid as { transaction: TurnTransaction; validation: TurnValidationResult } | null;
+      let savedProposal: PendingAiProposal | null = null;
+      const finalProposal = latestValid as (
+        | { kind: 'turn'; transaction: TurnTransaction; validation: TurnValidationResult }
+        | { kind: 'data'; transaction: DataChangeTransaction; validation: DataChangeValidationResult }
+      ) | null;
       if (finalProposal) {
-        savedProposal = this.database.aiProposals.save({
-          runId,
-          campaignId: request.campaignId,
-          conversationId: request.conversationId,
-          transaction: finalProposal.transaction,
-          validation: finalProposal.validation,
-          status: 'pending',
-        });
+        savedProposal = finalProposal.kind === 'turn'
+          ? this.database.aiProposals.save({
+            runId, campaignId: request.campaignId, conversationId: request.conversationId,
+            transaction: finalProposal.transaction, validation: finalProposal.validation, status: 'pending',
+          })
+          : this.database.aiDataChangeProposals.save({
+            runId, campaignId: request.campaignId, conversationId: request.conversationId,
+            transaction: finalProposal.transaction, validation: finalProposal.validation, status: 'pending',
+          });
         if (settings.approvalPolicy === 'automatic') {
-          savedProposal = this.database.aiProposals.apply(savedProposal.id).proposal;
+          savedProposal = savedProposal.kind === 'turn'
+            ? this.database.aiProposals.apply(savedProposal.id).proposal
+            : this.database.aiDataChangeProposals.apply(savedProposal.id).proposal;
         }
         yield { type: 'proposal', runId, proposal: savedProposal };
       }
@@ -215,7 +272,10 @@ export class AiTurnService {
         maxOutputTokens: settings.maxOutputTokens,
         instructions: `${buildChronicleInstructions(scene, settings)}\n\nDIAGNOSTICKÝ REŽIM: Neměň stav kampaně. Odpověz pouze OK a nevolej nástroje.`,
         input: [{ role: 'user', content: 'Reply with exactly OK. Do not call tools.' }],
-        tools: [...this.database.engine.listToolDescriptors(), proposalToolDescriptor()],
+        tools: [
+          ...this.database.engine.listToolDescriptors(),
+          ruleDefinitionSearchToolDescriptor(), proposalToolDescriptor(), dataChangeProposalToolDescriptor(),
+        ],
         executeTool: async () => ({
           output: { ok: false, diagnostic: true, message: 'Tool execution is disabled during the runtime test.' },
           truncated: false,
@@ -236,13 +296,17 @@ export class AiTurnService {
   }
 
   applyProposal(id: string) {
-    const applied = this.database.aiProposals.apply(id);
+    const applied = this.database.aiProposals.get(id)
+      ? this.database.aiProposals.apply(id)
+      : this.database.aiDataChangeProposals.apply(id);
     this.database.aiRuns.markProposalApplied(applied.proposal.turnRunId);
     return applied;
   }
 
-  rejectProposal(id: string): PendingTurnProposal {
-    const proposal = this.database.aiProposals.reject(id);
+  rejectProposal(id: string): PendingAiProposal {
+    const proposal = this.database.aiProposals.get(id)
+      ? this.database.aiProposals.reject(id)
+      : this.database.aiDataChangeProposals.reject(id);
     this.database.aiRuns.markProposalApplied(proposal.turnRunId);
     return proposal;
   }
@@ -267,6 +331,35 @@ function proposalValue(value: unknown): ProposedTurnTransaction {
     throw new ChronicleEngineError('INVALID_INPUT', 'Proposal musí být object.');
   }
   return value as ProposedTurnTransaction;
+}
+
+function dataProposalValue(value: unknown): ProposedDataChangeTransaction {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ChronicleEngineError('INVALID_INPUT', 'Data proposal musí být object.');
+  }
+  return value as ProposedDataChangeTransaction;
+}
+
+function ruleSearchValue(value: unknown, campaignId: string): {
+  query: string | null;
+  definitionTypes: string[] | null;
+  includeHomebrew: boolean;
+  limit: number | null;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ChronicleEngineError('INVALID_INPUT', 'Rule search musí být object.');
+  }
+  const input = value as Record<string, unknown>;
+  if (input.campaignId !== campaignId) {
+    throw new ChronicleEngineError('CROSS_CAMPAIGN_REFERENCE', 'Rule search patří jiné kampani.');
+  }
+  return {
+    query: typeof input.query === 'string' ? input.query : null,
+    definitionTypes: Array.isArray(input.definitionTypes)
+      ? input.definitionTypes.filter((item): item is string => typeof item === 'string') : null,
+    includeHomebrew: input.includeHomebrew !== false,
+    limit: typeof input.limit === 'number' ? input.limit : null,
+  };
 }
 
 function requiredText(value: unknown, label: string, maximum: number): string {

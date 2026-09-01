@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { seedBuiltInRuleDefinitions } from '../rules/builtin-catalog';
 
 export interface Migration {
   version: number;
@@ -893,6 +894,121 @@ export const migrations: readonly Migration[] = [
         END;
         CREATE TRIGGER campaign_search_relationship_delete AFTER DELETE ON relationship_profiles BEGIN
           DELETE FROM campaign_search_fts WHERE kind = 'relationship' AND record_id = old.id;
+        END;
+      `);
+    },
+  },
+  {
+    version: 7,
+    name: 'create_editable_domain_and_rules_catalog',
+    up(database) {
+      database.exec(`
+        ALTER TABLE campaign_ai_settings RENAME TO campaign_ai_settings_v6;
+        CREATE TABLE campaign_ai_settings (
+          campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL DEFAULT 'openai' CHECK (provider = 'openai'),
+          model_id TEXT NOT NULL DEFAULT 'gpt-5.6-sol' CHECK (length(trim(model_id)) > 0),
+          reasoning_effort TEXT NOT NULL DEFAULT 'medium'
+            CHECK (reasoning_effort IN ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')),
+          verbosity TEXT NOT NULL DEFAULT 'medium' CHECK (verbosity IN ('low', 'medium', 'high')),
+          max_output_tokens INTEGER NOT NULL DEFAULT 4096 CHECK (max_output_tokens BETWEEN 256 AND 32768),
+          approval_policy TEXT NOT NULL DEFAULT 'review' CHECK (approval_policy IN ('automatic', 'review', 'manual')),
+          campaign_instructions TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        ) STRICT;
+        INSERT INTO campaign_ai_settings SELECT * FROM campaign_ai_settings_v6;
+        DROP TABLE campaign_ai_settings_v6;
+
+        ALTER TABLE entities ADD COLUMN revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1);
+
+        ALTER TABLE rule_definitions ADD COLUMN campaign_id TEXT REFERENCES campaigns(id) ON DELETE CASCADE;
+        ALTER TABLE rule_definitions ADD COLUMN canonical_id TEXT;
+        ALTER TABLE rule_definitions ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE rule_definitions ADD COLUMN pack_id TEXT;
+        ALTER TABLE rule_definitions ADD COLUMN pack_version TEXT NOT NULL DEFAULT 'legacy';
+        ALTER TABLE rule_definitions ADD COLUMN locale TEXT NOT NULL DEFAULT 'en';
+        ALTER TABLE rule_definitions ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0
+          CHECK (is_builtin IN (0, 1));
+
+        CREATE UNIQUE INDEX rule_definitions_canonical_idx
+          ON rule_definitions(canonical_id) WHERE canonical_id IS NOT NULL;
+        CREATE INDEX rule_definitions_catalog_search_idx
+          ON rule_definitions(ruleset_id, ruleset_version, definition_type, is_builtin, name);
+        CREATE INDEX rule_definitions_campaign_homebrew_idx
+          ON rule_definitions(campaign_id, definition_type, name)
+          WHERE campaign_id IS NOT NULL;
+
+        CREATE TABLE data_change_transactions (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          origin TEXT NOT NULL CHECK (origin IN ('manual', 'ai', 'system')),
+          summary TEXT NOT NULL CHECK (length(trim(summary)) > 0),
+          payload_hash TEXT NOT NULL,
+          result_json TEXT NOT NULL,
+          source_run_id TEXT REFERENCES ai_turn_runs(id) ON DELETE SET NULL,
+          source_message_id TEXT REFERENCES conversation_messages(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX data_change_transactions_campaign_created_idx
+          ON data_change_transactions(campaign_id, created_at DESC);
+
+        CREATE TABLE data_change_audit_items (
+          id INTEGER PRIMARY KEY,
+          transaction_id TEXT NOT NULL REFERENCES data_change_transactions(id) ON DELETE CASCADE,
+          sequence INTEGER NOT NULL CHECK (sequence > 0),
+          change_type TEXT NOT NULL,
+          entity_id TEXT,
+          before_json TEXT,
+          after_json TEXT,
+          created_at TEXT NOT NULL,
+          UNIQUE (transaction_id, sequence)
+        ) STRICT;
+
+        CREATE INDEX data_change_audit_items_entity_idx
+          ON data_change_audit_items(entity_id, created_at DESC)
+          WHERE entity_id IS NOT NULL;
+
+        CREATE TABLE pending_data_change_proposals (
+          id TEXT PRIMARY KEY,
+          turn_run_id TEXT NOT NULL UNIQUE REFERENCES ai_turn_runs(id) ON DELETE CASCADE,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          transaction_id TEXT NOT NULL UNIQUE,
+          proposal_json TEXT NOT NULL,
+          validation_json TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'applied', 'rejected', 'manual')),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          applied_transaction_id TEXT REFERENCES data_change_transactions(id)
+        ) STRICT;
+
+        CREATE INDEX pending_data_change_proposals_campaign_status_idx
+          ON pending_data_change_proposals(campaign_id, status, created_at DESC);
+
+        CREATE TABLE rule_reference_reconciliations (
+          id INTEGER PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          character_id TEXT NOT NULL REFERENCES characters(entity_id) ON DELETE CASCADE,
+          old_definition_id TEXT NOT NULL REFERENCES rule_definitions(id),
+          new_definition_id TEXT NOT NULL REFERENCES rule_definitions(id),
+          category TEXT NOT NULL,
+          transaction_id TEXT NOT NULL REFERENCES data_change_transactions(id) DEFERRABLE INITIALLY DEFERRED,
+          created_at TEXT NOT NULL,
+          UNIQUE (character_id, old_definition_id, new_definition_id, category)
+        ) STRICT;
+      `);
+
+      seedBuiltInRuleDefinitions(database);
+
+      database.exec(`
+        CREATE TRIGGER rule_definitions_builtin_update
+        BEFORE UPDATE ON rule_definitions WHEN old.is_builtin = 1 BEGIN
+          SELECT RAISE(ABORT, 'Vestavěnou definici nelze upravit.');
+        END;
+        CREATE TRIGGER rule_definitions_builtin_delete
+        BEFORE DELETE ON rule_definitions WHEN old.is_builtin = 1 BEGIN
+          SELECT RAISE(ABORT, 'Vestavěnou definici nelze odstranit.');
         END;
       `);
     },

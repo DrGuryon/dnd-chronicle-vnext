@@ -341,6 +341,7 @@ export class ChronicleReadModelService {
       source: definition.source,
       origin: definition.origin,
       homebrew: definition.homebrew,
+      aliases: [...definition.aliases],
       metadata: definition.metadata,
       characterState,
       linkedResources: cockpit?.resources.filter((resource) => resource.source?.id === definition.id) ?? [],

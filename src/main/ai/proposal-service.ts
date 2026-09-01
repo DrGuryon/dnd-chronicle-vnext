@@ -145,6 +145,7 @@ interface ProposalRow {
 
 function fromRow(row: ProposalRow): PendingTurnProposal {
   return {
+    kind: 'turn',
     id: row.id,
     turnRunId: row.turnRunId,
     campaignId: row.campaignId,

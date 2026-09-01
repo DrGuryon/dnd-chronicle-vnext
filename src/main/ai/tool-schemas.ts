@@ -81,6 +81,13 @@ const toolSchemas: Readonly<Record<string, JsonSchema>> = {
     observerEntityId: nullableString,
     budget: { anyOf: [budget, { type: 'null' }] },
   }),
+  'chronicle.search_rule_definitions': object({
+    campaignId: string,
+    query: nullableString,
+    definitionTypes: nullableStringArray,
+    includeHomebrew: { type: 'boolean' },
+    limit: nullableNumber,
+  }),
 };
 
 export function strictToolDescriptor(descriptor: ChronicleToolDescriptor): ChronicleToolDescriptor {
@@ -106,6 +113,112 @@ export function proposalToolDescriptor(): ChronicleToolDescriptor {
     mutatesState: false,
     defaultLimits: { maxResults: 24, maxCharacters: 30_000 },
   };
+}
+
+export function dataChangeProposalToolDescriptor(): ChronicleToolDescriptor {
+  return {
+    name: 'chronicle.propose_data_changes',
+    description: 'Validate typed permanent profile/canonical-data edits for explicit user review. This never commits or mutates campaign state.',
+    inputSchema: object({
+      summary: string,
+      changes: { type: 'array', maxItems: 40, items: { anyOf: dataChangeSchemas() } },
+      expectedRevisions: {
+        anyOf: [
+          { type: 'array', items: object({ entityId: string, revision: { type: 'integer', minimum: 1 } }) },
+          { type: 'null' },
+        ],
+      },
+      reasoningSummary: nullableString,
+    }),
+    mutatesState: false,
+    defaultLimits: { maxResults: 40, maxCharacters: 40_000 },
+  };
+}
+
+export function ruleDefinitionSearchToolDescriptor(): ChronicleToolDescriptor {
+  return {
+    name: 'chronicle.search_rule_definitions',
+    description: 'Search built-in and campaign Homebrew rule definitions. Returns canonical IDs and never changes data.',
+    inputSchema: toolSchemas['chronicle.search_rule_definitions']!,
+    mutatesState: false,
+    defaultLimits: { maxResults: 60, maxCharacters: 20_000 },
+  };
+}
+
+function dataChangeSchemas(): JsonSchema[] {
+  const character = (type: string, properties: Readonly<Record<string, JsonSchema>>) => object({
+    type: constant(type), characterId: string, ...properties,
+  });
+  return [
+    object({
+      type: constant('character.create'), characterId: nullableString, name: string,
+      fullName: nullableString, characterType: { type: 'string', enum: ['PC', 'NPC'] }, description: string,
+    }),
+    character('character.identity.set', { name: string, fullName: nullableString, description: string }),
+    character('character.biography.set', {
+      age: nullableNumber, birthDate: nullableString, sexId: nullableString, genderId: nullableString,
+      sexualOrientationId: nullableString, alignment: nullableString, faithDefinitionId: nullableString,
+      appearance: nullableString, biography: nullableString, height: nullableString, weight: nullableString,
+      eyes: nullableString, hair: nullableString, skin: nullableString, personalityTraits: nullableString,
+      ideals: nullableString, bonds: nullableString, flaws: nullableString, notes: nullableString,
+    }),
+    character('character.origin.set', { speciesId: nullableString, lineageId: nullableString, backgroundId: nullableString }),
+    character('character.class.add', { classEntryId: nullableString, classId: string, subclassId: nullableString, level: { type: 'integer', minimum: 1, maximum: 20 } }),
+    character('character.class.update', { classEntryId: string, classId: string, subclassId: nullableString, level: { type: 'integer', minimum: 1, maximum: 20 } }),
+    character('character.class.remove', { classEntryId: string }),
+    character('character.ability.set', {
+      abilityId: { type: 'string', enum: ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'] },
+      baseScore: { type: 'integer' }, permanentModifier: { type: 'integer' }, overrideScore: nullableNumber,
+    }),
+    character('character.proficiency.add', {
+      proficiencyId: nullableString,
+      category: { type: 'string', enum: ['savingThrow', 'skill', 'weapon', 'armor', 'shield', 'tool', 'custom'] },
+      targetDefinitionId: nullableString, customTarget: nullableString,
+      level: { type: 'string', enum: ['none', 'half', 'proficient', 'expertise'] },
+    }),
+    character('character.proficiency.update', {
+      proficiencyId: string,
+      category: { type: 'string', enum: ['savingThrow', 'skill', 'weapon', 'armor', 'shield', 'tool', 'custom'] },
+      targetDefinitionId: nullableString, customTarget: nullableString,
+      level: { type: 'string', enum: ['none', 'half', 'proficient', 'expertise'] },
+    }),
+    character('character.proficiency.remove', { proficiencyId: string }),
+    character('character.language.add', { proficiencyId: nullableString, languageDefinitionId: nullableString, customLanguage: nullableString }),
+    character('character.language.update', { proficiencyId: string, languageDefinitionId: nullableString, customLanguage: nullableString }),
+    character('character.language.remove', { proficiencyId: string }),
+    character('character.feature.add', { featureId: nullableString, definitionId: nullableString, customName: nullableString, customDescription: nullableString }),
+    character('character.feature.update', { featureId: string, definitionId: nullableString, customName: nullableString, customDescription: nullableString }),
+    character('character.feature.remove', { featureId: string }),
+    character('character.spellcastingSource.add', {
+      sourceId: nullableString, sourceType: string, sourceDefinitionId: string,
+      abilityId: { type: 'string', enum: ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'] },
+      mechanism: string,
+    }),
+    character('character.spellcastingSource.update', {
+      sourceId: string, sourceType: string, sourceDefinitionId: string,
+      abilityId: { type: 'string', enum: ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'] },
+      mechanism: string,
+    }),
+    character('character.spellcastingSource.remove', { sourceId: string }),
+    character('character.spell.add', {
+      characterSpellId: nullableString, spellId: string, spellcastingSourceId: string,
+      known: { type: 'boolean' }, prepared: { type: 'boolean' }, alwaysPrepared: { type: 'boolean' },
+      ritualAvailable: { type: 'boolean' }, customNotes: nullableString,
+    }),
+    character('character.spell.update', {
+      characterSpellId: string, spellId: string, spellcastingSourceId: string,
+      known: { type: 'boolean' }, prepared: { type: 'boolean' }, alwaysPrepared: { type: 'boolean' },
+      ritualAvailable: { type: 'boolean' }, customNotes: nullableString,
+    }),
+    character('character.spell.remove', { characterSpellId: string }),
+    character('character.notes.replace', { notes: nullableString }),
+    character('character.notes.append', { notes: string }),
+    object({
+      type: constant('ruleDefinition.homebrew.create'), definitionId: nullableString,
+      definitionType: string, name: string, description: string,
+      aliases: { type: 'array', items: string },
+    }),
+  ];
 }
 
 function turnChangeSchemas(): JsonSchema[] {

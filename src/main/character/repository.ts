@@ -31,13 +31,16 @@ export class SqliteCharacterRepository {
     this.database.prepare(`
       INSERT INTO rule_definitions(
         id, definition_type, ruleset_id, ruleset_version, name, description,
-        source, origin, metadata, is_homebrew, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        source, origin, metadata, is_homebrew, created_at, updated_at,
+        campaign_id, canonical_id, aliases, pack_id, pack_version, locale, is_builtin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       definition.id, definition.definitionType, definition.rulesetId,
       definition.rulesetVersion, definition.name, definition.description,
       definition.source, definition.origin, json(definition.metadata),
       integer(definition.homebrew), definition.createdAt, definition.updatedAt,
+      definition.campaignId, definition.canonicalId, JSON.stringify(definition.aliases),
+      definition.packId, definition.packVersion, definition.locale, integer(definition.builtIn),
     );
   }
 
@@ -46,7 +49,9 @@ export class SqliteCharacterRepository {
       SELECT id, definition_type AS definitionType, ruleset_id AS rulesetId,
              ruleset_version AS rulesetVersion, name, description, source, origin,
              metadata, is_homebrew AS homebrew, created_at AS createdAt,
-             updated_at AS updatedAt
+             updated_at AS updatedAt, campaign_id AS campaignId, canonical_id AS canonicalId,
+             aliases, pack_id AS packId, pack_version AS packVersion, locale,
+             is_builtin AS builtIn
       FROM rule_definitions WHERE id = ?
     `).get(id) as unknown as Record<string, unknown> | undefined;
     return row ? mapDefinition(row) : undefined;
@@ -57,7 +62,7 @@ export class SqliteCharacterRepository {
     rulesetVersion?: string;
     definitionType?: string;
   } = {}): RuleDefinition[] {
-    const clauses: string[] = [];
+    const clauses: string[] = ['is_builtin = 0'];
     const values: string[] = [];
     if (filters.rulesetId) {
       clauses.push('ruleset_id = ?');
@@ -76,7 +81,9 @@ export class SqliteCharacterRepository {
       SELECT id, definition_type AS definitionType, ruleset_id AS rulesetId,
              ruleset_version AS rulesetVersion, name, description, source, origin,
              metadata, is_homebrew AS homebrew, created_at AS createdAt,
-             updated_at AS updatedAt
+             updated_at AS updatedAt, campaign_id AS campaignId, canonical_id AS canonicalId,
+             aliases, pack_id AS packId, pack_version AS packVersion, locale,
+             is_builtin AS builtIn
       FROM rule_definitions ${where} ORDER BY name, id
     `).all(...values) as unknown as Array<Record<string, unknown>>;
     return rows.map(mapDefinition);
@@ -709,7 +716,19 @@ function mapDefinition(row: Record<string, unknown>): RuleDefinition {
     ...row,
     metadata: parseObject(row.metadata),
     homebrew: Boolean(row.homebrew),
+    builtIn: Boolean(row.builtIn),
+    aliases: parseStringArray(row.aliases),
   } as unknown as RuleDefinition;
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 function mapEffect(row: Record<string, unknown>): ActiveEffect {

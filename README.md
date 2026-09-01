@@ -30,9 +30,9 @@ Databáze není součástí instalace. Za běhu se vytvoří v Electron `userDat
 
 Přeinstalace ani odinstalace aplikace tento adresář nemaže. Před každou budoucí migrací již existující databáze se do `backups/` vytvoří konzistentní SQLite backup.
 
-Schéma v6 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Vedle runtime scén, konverzací, observer-aware Knowledge a idempotentních Turn Transactions ukládá bezpečně filtrované vztahové profily, návrhy změn a technický audit AI tahů. V4 preference pravého panelu zůstávají izolované od světa kampaně.
+Schéma v7 odděluje pravidlové Definition, konkrétní Instance, současný State a historický Event. Přidává globální verzovaný katalog otevřených pravidel, Character Builder/Editor 2.0 a idempotentní `DataChangeTransaction` pro ruční i AI úpravy profilu. Administrativní audit je oddělený od událostí fikčního světa. Runtime scény, observer-aware Knowledge, Turn Transactions, vztahové profily a preference panelu zůstávají zachované.
 
-Renderer SQL ani API klíč přímo nepoužívá. Chronicle Engine sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny jednoho tahu. OpenAI adapter používá oficiální SDK a Responses API s `store: false`; běžné testy používají Fake provider a síť nevolají. UI shell, první spuštění a technické vrstvy popisují [`docs/ui-shell.md`](docs/ui-shell.md), [`docs/first-run-workflow.md`](docs/first-run-workflow.md), [`docs/architecture.md`](docs/architecture.md), [`docs/chronicle-engine.md`](docs/chronicle-engine.md) a [`docs/ai-runtime.md`](docs/ai-runtime.md).
+Renderer SQL ani API klíč přímo nepoužívá. Chronicle Engine sestavuje malý Hot SceneContext, nabízí bounded Warm/Cold retrieval a atomicky validuje strukturované změny. OpenAI adapter používá oficiální SDK a Responses API s `store: false`; běžné testy používají Fake provider a síť nevolají. Nové vrstvy popisují [`docs/ruleset-registry.md`](docs/ruleset-registry.md), [`docs/rules-content-catalog.md`](docs/rules-content-catalog.md), [`docs/editable-domain.md`](docs/editable-domain.md), [`docs/character-editor.md`](docs/character-editor.md) a [`docs/ai-orchestration.md`](docs/ai-orchestration.md).
 
 ## Nastavení AI
 
@@ -54,7 +54,7 @@ Pro produkční distribuci nastavte repozitářové secrets `WIN_CSC_LINK` a `WI
 
 1. Zvyšte `version` v `package.json`.
 2. Commitněte změnu.
-3. Vytvořte odpovídající tag, např. `v0.7.0`.
+3. Vytvořte odpovídající tag, např. `v0.8.0`.
 4. Pushněte tag. GitHub Actions provede testy, build a publikaci.
 
 Nikdy nemíchejte installer a `latest.yml` z různých buildů; updater ověřuje SHA-512 metadata.

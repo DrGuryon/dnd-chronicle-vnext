@@ -86,7 +86,9 @@ if (firstRun) {
   await click('[data-view-panel="play"] [data-action="create-character"]');
   await waitFor("document.querySelector('[data-form-dialog]')?.open === true", 'character dialog');
   await setValue('[data-form-dialog] [name="name"]', 'Arqos');
-  await click('[data-form-dialog] [data-dialog-submit]');
+  await setValue('[data-form-dialog] [name="species"]', 'Human');
+  await setValue('[data-form-dialog] [name="className"]', 'Fighter');
+  await click('[data-form-dialog] [data-editor-submit]');
 
   await waitFor(`${visibleText('Arqos')} && ${visibleText('Vytvořte první konverzaci.')}`, 'active character and cockpit');
   await click('[data-view-panel="play"] [data-action="create-conversation"]');
@@ -105,6 +107,11 @@ await click('[data-nav-view="settings"]');
 await waitFor("!document.querySelector('[data-view-panel=\"settings\"]')?.hidden", 'Settings view');
 await click('[data-nav-view="library"]');
 await waitFor("!document.querySelector('[data-view-panel=\"library\"]')?.hidden && document.querySelector('[data-view-panel=\"library\"]')?.textContent?.includes('Arqos')", 'Library view');
+await click('[data-view-panel="library"] [data-entity-kind="Character"]');
+await waitFor("document.querySelector('[data-entity-card-dialog]')?.open === true && document.querySelector('[data-card-action=\"edit-character\"]') !== null", 'Character Entity Card edit action');
+await click('[data-card-action="edit-character"]');
+await waitFor("document.querySelector('[data-form-dialog]')?.open === true && document.querySelector('[data-form-dialog] [name=\"name\"]')?.value === 'Arqos'", 'Character editor from Entity Card');
+await click('[data-form-dialog] [data-editor-cancel]');
 await click('[data-nav-view="campaigns"]');
 await waitFor("!document.querySelector('[data-view-panel=\"campaigns\"]')?.hidden && document.querySelector('[data-view-panel=\"campaigns\"]')?.textContent?.includes('Ravenford')", 'Campaigns view');
 await click('[data-nav-view="play"]');
@@ -184,7 +191,7 @@ await click('[data-view-panel="play"] [data-action="create-character"]');
 await waitFor("document.querySelector('[data-form-dialog]')?.open === true", 'small-window character dialog');
 const smallDialog = await evaluate(`(() => {
   const dialog = document.querySelector('[data-form-dialog]');
-  const scroll = dialog.querySelector('.form-dialog-scroll');
+  const scroll = dialog.querySelector('.character-editor-scroll');
   const footer = dialog.querySelector('footer');
   const rect = dialog.getBoundingClientRect();
   const footerRect = footer.getBoundingClientRect();
@@ -196,14 +203,38 @@ const smallDialog = await evaluate(`(() => {
     footerReachable: footerRect.bottom <= innerHeight + 1,
   };
 })()`);
-await click('[data-form-dialog] [data-dialog-cancel]');
+await click('[data-form-dialog] [data-editor-cancel]');
 if (!smallDialog.fitsViewport || !smallDialog.internalScroll || !smallDialog.footerReachable) {
   throw new Error(`Small dialog acceptance failed: ${JSON.stringify(smallDialog)}`);
+}
+await click('[data-view-panel="play"] [data-action="edit-character"]');
+await waitFor("document.querySelector('[data-form-dialog]')?.open === true && document.querySelector('[data-form-dialog] [name=classes]') !== null", 'small-window advanced character editor');
+const advancedDialog = await evaluate(`(() => {
+  const dialog = document.querySelector('[data-form-dialog]');
+  const scroll = dialog.querySelector('.character-editor-scroll');
+  const footer = dialog.querySelector('footer');
+  const rect = dialog.getBoundingClientRect();
+  const footerRect = footer.getBoundingClientRect();
+  return {
+    fitsViewport: rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
+    internalScroll: ['auto', 'scroll'].includes(getComputedStyle(scroll).overflowY),
+    footerReachable: footerRect.bottom <= innerHeight + 1,
+    hasAbilities: dialog.querySelectorAll('[name^=ability_]').length === 6,
+    viewport: { width: innerWidth, height: innerHeight },
+    dialogRect: { top: rect.top, bottom: rect.bottom, height: rect.height },
+    footerRect: { top: footerRect.top, bottom: footerRect.bottom, height: footerRect.height },
+    formHeight: dialog.querySelector('form').getBoundingClientRect().height,
+    fieldsetHeight: dialog.querySelector('fieldset').getBoundingClientRect().height,
+  };
+})()`);
+await click('[data-form-dialog] [data-editor-cancel]');
+if (!advancedDialog.fitsViewport || !advancedDialog.internalScroll || !advancedDialog.footerReachable || !advancedDialog.hasAbilities) {
+  throw new Error(`Advanced dialog acceptance failed: ${JSON.stringify(advancedDialog)}`);
 }
 await send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
 await evaluate("window.dispatchEvent(new Event('resize'))");
 
-console.log(JSON.stringify({ summary, layouts, highDpi, smallDialog }));
+console.log(JSON.stringify({ summary, layouts, highDpi, smallDialog, advancedDialog }));
 if (closeAfter) {
   socket.send(JSON.stringify({ id: ++messageId, method: 'Browser.close', params: {} }));
   await new Promise((resolve) => setTimeout(resolve, 250));

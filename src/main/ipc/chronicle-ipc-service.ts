@@ -1,4 +1,4 @@
-import { requireDomainId, type DomainIdPrefix } from '../../domain/ids';
+import { createDomainId, requireDomainId, type DomainIdPrefix } from '../../domain/ids';
 import { AbilityIds } from '../../domain/character-models';
 import { LifeStateIds, type Character, type EventDraft } from '../../domain/models';
 import type {
@@ -30,7 +30,17 @@ import type {
   EntitySummary,
 } from '../../shared/read-models';
 import { ChronicleDatabase } from '../database';
-import type { CampaignAiSettings, CampaignAiSettingsUpdate, PendingTurnProposal } from '../../shared/ai';
+import type { CampaignAiSettings, CampaignAiSettingsUpdate, PendingAiProposal } from '../../shared/ai';
+import type {
+  CharacterDraft,
+  CharacterEditorView,
+  DataChangeAuditTransaction,
+  DataChangeTransactionResult,
+  RuleCatalogQuery,
+  RuleCatalogResult,
+  RuleReconciliationSuggestion,
+} from '../../shared/editable-domain';
+import type { RulesetDescriptor } from '../../rules/registry';
 
 export class ChronicleIpcService {
   constructor(private readonly database: ChronicleDatabase) {}
@@ -43,10 +53,7 @@ export class ChronicleIpcService {
     const input = object(value, 'Create campaign command');
     const rulesetId = textValue(input.rulesetId, 'Ruleset ID');
     const rulesetVersion = textValue(input.rulesetVersion, 'Ruleset version');
-    if (rulesetId !== 'dnd5e') throw new Error('M7 podporuje ruleset dnd5e.');
-    if (rulesetVersion !== '2014' && rulesetVersion !== '2024') {
-      throw new Error('Ruleset version musí být 2014 nebo 2024.');
-    }
+    this.database.rulesets.require(rulesetId, rulesetVersion);
     const campaign = this.database.domain.createCampaign({
       name: boundedText(input.name, 'Název kampaně', 120),
       rulesetId,
@@ -86,76 +93,49 @@ export class ChronicleIpcService {
       throw new Error('Level musí být celé číslo od 1 do 20.');
     }
 
-    const character = this.database.domain.createCharacter({
+    const homebrewDefinitions: NonNullable<CharacterDraft['homebrewDefinitions']>[number][] = [];
+    const classId = this.resolveDefinitionOrHomebrew(
+      campaign,
+      'Class',
+      optionalBoundedText(input.className, 'Povolání', 120) ?? 'Neurčené povolání',
+      homebrewDefinitions,
+    );
+    const species = optionalBoundedText(input.species, 'Druh', 120);
+    const background = optionalBoundedText(input.background, 'Zázemí', 120);
+    const saved = this.database.characterEditor.save({
       campaignId,
       name,
       fullName,
       description: '',
       characterType: 'PC',
-      currentLifeStateId: LifeStateIds.alive,
+      biography: emptyBiography(),
+      origin: {
+        speciesId: species ? this.resolveDefinitionOrHomebrew(campaign, 'Species', species, homebrewDefinitions) : null,
+        lineageId: null,
+        backgroundId: background ? this.resolveDefinitionOrHomebrew(campaign, 'Background', background, homebrewDefinitions) : null,
+      },
+      classes: [{ id: createDomainId('class'), classId, subclassId: null, level }],
+      abilities: AbilityIds.map((abilityId) => ({ abilityId, baseScore: 10, permanentModifier: 0, overrideScore: null })),
+      proficiencies: [],
+      features: [],
+      spellcastingSources: [],
+      spells: [],
+      homebrewDefinitions,
     });
-    for (const abilityId of AbilityIds) {
-      this.database.characters.setAbilityScore({
-        characterId: character.id,
-        abilityId,
-        baseScore: 10,
-        permanentModifier: 0,
-        overrideScore: null,
-      });
-    }
-    this.database.characters.setCombatState({
-      characterId: character.id,
-      maximumHp: 10,
-      currentHp: 10,
-      temporaryHp: 0,
-      armorClassBase: 10,
-      armorClassModifier: 0,
-      armorClassOverride: null,
-      initiativeModifier: 0,
-      deathSaveSuccesses: 0,
-      deathSaveFailures: 0,
-      inspiration: false,
-    });
-    this.database.characters.addMovement({
-      characterId: character.id,
-      movementType: 'walk',
-      distance: 30,
-      unit: 'ft',
-      sourceType: 'bootstrap',
-      sourceId: character.id,
-      condition: null,
-    });
-
-    const classDefinition = this.bootstrapDefinition(
-      campaign,
-      'Class',
-      optionalBoundedText(input.className, 'Povolání', 120) ?? 'Neurčené povolání',
-    );
-    this.database.characters.addClass({
-      characterId: character.id,
-      classId: classDefinition.id,
-      subclassId: null,
-      level,
-      acquiredEventId: null,
-    });
-    const species = optionalBoundedText(input.species, 'Druh', 120);
-    const background = optionalBoundedText(input.background, 'Zázemí', 120);
-    this.database.characters.setOrigin(character.id, {
-      speciesId: species ? this.bootstrapDefinition(campaign, 'Species', species).id : null,
-      lineageId: null,
-      backgroundId: background ? this.bootstrapDefinition(campaign, 'Background', background).id : null,
-    });
-    this.database.engine.setActivePlayerCharacter(campaignId, character.id);
-    return this.database.domain.getCharacter(character.id)!;
+    this.database.engine.setActivePlayerCharacter(campaignId, saved.view.character.id);
+    return saved.view.character;
   }
 
   updateCharacterBasics(value: unknown): Character {
     const input = object(value, 'Update character basics command');
-    return this.database.domain.updateCharacterBasics({
-      characterId: domainId(input.characterId, 'char'),
+    const characterId = domainId(input.characterId, 'char');
+    const view = this.database.characterEditor.get(characterId);
+    if (!view) throw new Error(`Postava ${characterId} neexistuje.`);
+    return this.database.characterEditor.save({
+      ...draftFromView(view),
       name: boundedText(input.name, 'Jméno postavy', 120),
       fullName: optionalBoundedText(input.fullName, 'Celé jméno', 160),
-    });
+    }).view.character;
   }
 
   getCharacterCockpit(characterId?: unknown): CharacterCockpitView | null {
@@ -413,6 +393,99 @@ export class ChronicleIpcService {
     return this.database.engine.getCampaignLibrary(domainId(value, 'campaign'));
   }
 
+  listRulesets(): RulesetDescriptor[] {
+    return this.database.rulesCatalog.listRulesets();
+  }
+
+  searchRuleDefinitions(value: unknown): RuleCatalogResult {
+    const input = object(value, 'Rule catalog query');
+    const definitionTypes = input.definitionTypes === undefined || input.definitionTypes === null
+      ? null
+      : stringArray(input.definitionTypes, 'Typy definic');
+    return this.database.rulesCatalog.search({
+      rulesetId: textValue(input.rulesetId, 'Ruleset ID'),
+      rulesetVersion: textValue(input.rulesetVersion, 'Ruleset version'),
+      campaignId: input.campaignId ? domainId(input.campaignId, 'campaign') : null,
+      definitionTypes,
+      query: typeof input.query === 'string' ? input.query : null,
+      includeBuiltIn: input.includeBuiltIn !== false,
+      includeHomebrew: input.includeHomebrew !== false,
+      limit: input.limit === undefined ? 60 : finiteNumber(input.limit, 'Limit'),
+    });
+  }
+
+  getCharacterEditor(value: unknown): CharacterEditorView | null {
+    return this.database.characterEditor.get(domainId(value, 'char')) ?? null;
+  }
+
+  saveCharacterDraft(value: unknown): { view: CharacterEditorView; result: DataChangeTransactionResult } {
+    const draft = value as CharacterDraft;
+    const saved = this.database.characterEditor.save(draft);
+    if (!draft.characterId) {
+      this.database.engine.setActivePlayerCharacter(saved.view.character.campaignId, saved.view.character.id);
+    }
+    return saved;
+  }
+
+  updateHomebrewDefinition(value: unknown): DataChangeTransactionResult {
+    const input = object(value, 'Update Homebrew definition command');
+    const campaignId = domainId(input.campaignId, 'campaign');
+    const definitionId = domainId(input.definitionId, 'def');
+    const name = boundedText(input.name, 'Název definice', 160);
+    return this.database.dataChanges.apply({
+      id: createDomainId('change'),
+      campaignId,
+      origin: 'manual',
+      summary: `Úprava Homebrew definice ${name}`,
+      changes: [{
+        type: 'ruleDefinition.homebrew.update',
+        definitionId,
+        name,
+        description: typeof input.description === 'string' ? input.description : '',
+        aliases: input.aliases === undefined ? [] : stringArray(input.aliases, 'Aliasy definice'),
+      }],
+      expectedRevisions: [],
+      sourceRunId: null,
+      sourceMessageId: null,
+    });
+  }
+
+  getRuleReconciliationSuggestions(value: unknown): RuleReconciliationSuggestion[] {
+    const input = object(value, 'Reconciliation query');
+    return this.database.rulesCatalog.reconciliationSuggestions(
+      domainId(input.campaignId, 'campaign'),
+      input.characterId ? domainId(input.characterId, 'char') : undefined,
+    );
+  }
+
+  applyRuleReconciliation(value: unknown): DataChangeTransactionResult {
+    const suggestion = value as RuleReconciliationSuggestion;
+    const character = this.database.domain.getCharacter(domainId(suggestion.characterId, 'char'));
+    if (!character) throw new Error('Postava pro spárování neexistuje.');
+    const view = this.database.characterEditor.get(character.id)!;
+    return this.database.dataChanges.apply({
+      id: createDomainId('change'),
+      campaignId: character.campaignId,
+      origin: 'manual',
+      summary: `Spárování ${suggestion.oldDefinition.name} s ${suggestion.suggestedDefinition.name}`,
+      changes: [{
+        type: 'ruleReference.reassign',
+        characterId: character.id,
+        category: suggestion.category,
+        referenceId: suggestion.referenceId,
+        fromDefinitionId: suggestion.oldDefinition.id,
+        toDefinitionId: suggestion.suggestedDefinition.id,
+      }],
+      expectedRevisions: [{ entityId: character.id, revision: view.revision }],
+      sourceRunId: null,
+      sourceMessageId: null,
+    });
+  }
+
+  getDataChangeAudit(value: unknown): DataChangeAuditTransaction[] {
+    return this.database.dataChanges.listAudit(domainId(value, 'campaign'));
+  }
+
   getAiSettings(value: unknown): CampaignAiSettings {
     return this.database.aiSettings.get(domainId(value, 'campaign'));
   }
@@ -423,8 +496,12 @@ export class ChronicleIpcService {
     return this.database.aiSettings.update(domainId(input.campaignId, 'campaign'), settings);
   }
 
-  listPendingAiProposals(value: unknown): PendingTurnProposal[] {
-    return this.database.aiProposals.listPending(domainId(value, 'campaign'));
+  listPendingAiProposals(value: unknown): PendingAiProposal[] {
+    const campaignId = domainId(value, 'campaign');
+    return [
+      ...this.database.aiProposals.listPending(campaignId),
+      ...this.database.aiDataChangeProposals.listPending(campaignId),
+    ].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   getSceneContext(value: unknown): SceneContextView {
@@ -439,22 +516,28 @@ export class ChronicleIpcService {
     return this.database.orchestrator.getTrace();
   }
 
-  private bootstrapDefinition(
-    campaign: { rulesetId: string; rulesetVersion: string },
+  private resolveDefinitionOrHomebrew(
+    campaign: { id: string; rulesetId: string; rulesetVersion: string },
     definitionType: 'Class' | 'Species' | 'Background',
     name: string,
-  ) {
-    return this.database.characters.createDefinition({
-      definitionType,
+    homebrew: NonNullable<CharacterDraft['homebrewDefinitions']>[number][],
+  ): string {
+    const matches = this.database.rulesCatalog.search({
+      campaignId: campaign.id,
       rulesetId: campaign.rulesetId,
       rulesetVersion: campaign.rulesetVersion,
-      name,
-      description: '',
-      source: 'Campaign bootstrap',
-      origin: 'user',
-      metadata: { bootstrap: true },
-      homebrew: true,
-    });
+      definitionTypes: [definitionType],
+      query: name,
+      limit: 20,
+    }).items;
+    const normalized = normalize(name);
+    const match = matches.find((definition) => (
+      [definition.name, ...definition.aliases].some((candidate) => normalize(candidate) === normalized)
+    ));
+    if (match) return match.id;
+    const id = createDomainId('def');
+    homebrew.push({ id, definitionType, name, description: '', aliases: [] });
+    return id;
   }
 
   private refresh(characterId: string): CharacterCockpitView {
@@ -644,6 +727,74 @@ function finiteNumber(value: unknown, label: string): number {
     throw new Error(`${label} musí být konečné číslo.`);
   }
   return value;
+}
+
+function stringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error(`${label} musí být pole textů.`);
+  }
+  return value as string[];
+}
+
+function emptyBiography(): CharacterDraft['biography'] {
+  return {
+    age: null,
+    birthDate: null,
+    sexId: null,
+    genderId: null,
+    sexualOrientationId: null,
+    alignment: null,
+    faithDefinitionId: null,
+    appearance: null,
+    biography: null,
+    height: null,
+    weight: null,
+    eyes: null,
+    hair: null,
+    skin: null,
+    personalityTraits: null,
+    ideals: null,
+    bonds: null,
+    flaws: null,
+    notes: null,
+  };
+}
+
+function draftFromView(view: CharacterEditorView): CharacterDraft {
+  const { characterId: _biographyCharacterId, ...biography } = view.biography;
+  const { characterId: _originCharacterId, ...origin } = view.origin;
+  return {
+    campaignId: view.character.campaignId,
+    characterId: view.character.id,
+    baseRevision: view.revision,
+    name: view.character.name,
+    fullName: view.character.fullName,
+    description: view.character.description,
+    characterType: view.character.characterType,
+    biography,
+    origin,
+    classes: view.classes.map(({ characterId: _characterId, acquiredEventId: _eventId, ...item }) => item),
+    abilities: view.abilities.map(({ characterId: _characterId, ...item }) => item),
+    proficiencies: view.proficiencies.map(({
+      characterId: _characterId, sourceType: _sourceType, sourceId: _sourceId,
+      metadata: _metadata, ...item
+    }) => item),
+    features: view.features.map(({
+      characterId: _characterId, sourceType: _sourceType, sourceId: _sourceId,
+      acquiredEventId: _eventId, enabled: _enabled, choices: _choices,
+      metadata: _metadata, ...item
+    }) => item),
+    spellcastingSources: view.spellcastingSources.map(({
+      characterId: _characterId, attackModifier: _attackModifier, dcModifier: _dcModifier,
+      metadata: _metadata, ...item
+    }) => item),
+    spells: view.spells.map(({ characterId: _characterId, acquiredEventId: _eventId, ...item }) => item),
+    homebrewDefinitions: [],
+  };
+}
+
+function normalize(value: string): string {
+  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('cs-CZ');
 }
 
 function hpSummary(amount: number): string {

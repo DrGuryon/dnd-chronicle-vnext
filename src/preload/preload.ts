@@ -126,6 +126,28 @@ const api: ChronicleApi = {
   getCampaignLibrary: (campaignId) => ipcRenderer.invoke(
     'library:get-campaign', campaignId,
   ) as ReturnType<ChronicleApi['getCampaignLibrary']>,
+  listRulesets: () => ipcRenderer.invoke('rules:list-rulesets') as ReturnType<ChronicleApi['listRulesets']>,
+  searchRuleDefinitions: (query) => ipcRenderer.invoke(
+    'rules:search-definitions', query,
+  ) as ReturnType<ChronicleApi['searchRuleDefinitions']>,
+  getCharacterEditor: (characterId) => ipcRenderer.invoke(
+    'character:get-editor', characterId,
+  ) as ReturnType<ChronicleApi['getCharacterEditor']>,
+  saveCharacterDraft: (draft) => ipcRenderer.invoke(
+    'character:save-draft', draft,
+  ) as ReturnType<ChronicleApi['saveCharacterDraft']>,
+  updateHomebrewDefinition: (command) => ipcRenderer.invoke(
+    'rules:update-homebrew-definition', command,
+  ) as ReturnType<ChronicleApi['updateHomebrewDefinition']>,
+  getRuleReconciliationSuggestions: (query) => ipcRenderer.invoke(
+    'rules:get-reconciliation-suggestions', query,
+  ) as ReturnType<ChronicleApi['getRuleReconciliationSuggestions']>,
+  applyRuleReconciliation: (suggestion) => ipcRenderer.invoke(
+    'rules:apply-reconciliation', suggestion,
+  ) as ReturnType<ChronicleApi['applyRuleReconciliation']>,
+  getDataChangeAudit: (campaignId) => ipcRenderer.invoke(
+    'data-change:list-audit', campaignId,
+  ) as ReturnType<ChronicleApi['getDataChangeAudit']>,
   getAiSettings: (campaignId) => ipcRenderer.invoke('ai:get-settings', campaignId) as ReturnType<ChronicleApi['getAiSettings']>,
   saveAiSettings: (command) => ipcRenderer.invoke('ai:save-settings', command) as ReturnType<ChronicleApi['saveAiSettings']>,
   getAiSecretStatus: () => ipcRenderer.invoke('ai:get-secret-status') as ReturnType<ChronicleApi['getAiSecretStatus']>,

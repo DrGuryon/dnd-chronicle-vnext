@@ -174,6 +174,14 @@ function registerIpc(): void {
   handle('conversation:rename', (command) => chronicle.renameConversation(command));
   handle('conversation:list-messages', (conversationId) => chronicle.listConversationMessages(conversationId));
   handle('library:get-campaign', (campaignId) => chronicle.getCampaignLibrary(campaignId));
+  handle('rules:list-rulesets', () => chronicle.listRulesets());
+  handle('rules:search-definitions', (query) => chronicle.searchRuleDefinitions(query));
+  handle('character:get-editor', (characterId) => chronicle.getCharacterEditor(characterId));
+  handle('character:save-draft', (draft) => chronicle.saveCharacterDraft(draft));
+  handle('rules:update-homebrew-definition', (command) => chronicle.updateHomebrewDefinition(command));
+  handle('rules:get-reconciliation-suggestions', (query) => chronicle.getRuleReconciliationSuggestions(query));
+  handle('rules:apply-reconciliation', (suggestion) => chronicle.applyRuleReconciliation(suggestion));
+  handle('data-change:list-audit', (campaignId) => chronicle.getDataChangeAudit(campaignId));
   handle('ai:get-settings', (campaignId) => chronicle.getAiSettings(campaignId));
   handle('ai:save-settings', (command) => chronicle.saveAiSettings(command));
   handle('ai:list-pending-proposals', (campaignId) => chronicle.listPendingAiProposals(campaignId));

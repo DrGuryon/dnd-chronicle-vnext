@@ -41,7 +41,7 @@ describe('Milestone 7 first-run workspace', () => {
     expect(character).toMatchObject({ name: 'Arqos', characterType: 'PC', campaignId: campaign.id });
     expect(database.engine.getCampaignRuntimeState(campaign.id).activePlayerCharacterId).toBe(character.id);
     expect(ipc.getCharacterCockpit(character.id)).toMatchObject({
-      identity: { name: 'Arqos', totalLevel: 1, classSummary: 'Bojovník 1' },
+      identity: { name: 'Arqos', totalLevel: 1, classSummary: 'Fighter 1' },
       combat: { hp: { current: 10, maximum: 10 } },
     });
 
@@ -118,7 +118,7 @@ describe('Milestone 7 first-run workspace', () => {
     raw.close();
 
     const reopened = await ChronicleDatabase.open(opened.directory);
-    expect(reopened.info.schemaVersion).toBe(6);
+    expect(reopened.info.schemaVersion).toBe(7);
     expect(reopened.aiSettings.get(campaign.id).reasoningEffort).toBe('low');
     reopened.close();
   });

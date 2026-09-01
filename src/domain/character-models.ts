@@ -38,6 +38,7 @@ export const AbilityIds: readonly AbilityId[] = [
 
 export interface RuleDefinition {
   id: string;
+  campaignId: string | null;
   definitionType: DefinitionType | string;
   rulesetId: string;
   rulesetVersion: string;
@@ -45,6 +46,12 @@ export interface RuleDefinition {
   description: string;
   source: string;
   origin: string;
+  canonicalId: string | null;
+  aliases: readonly string[];
+  packId: string | null;
+  packVersion: string;
+  locale: string;
+  builtIn: boolean;
   metadata: Readonly<Record<string, unknown>> | null;
   homebrew: boolean;
   createdAt: string;

@@ -32,7 +32,20 @@ import { SqliteChronicleRepository } from '../domain/repository';
 import { SqliteCharacterRepository } from './repository';
 
 type WithOptionalId<T extends { id: string }> = Omit<T, 'id'> & { id?: string };
-type NewDefinition = Omit<RuleDefinition, 'id' | 'createdAt' | 'updatedAt'> & { id?: string };
+type NewDefinition = Omit<
+  RuleDefinition,
+  'id' | 'createdAt' | 'updatedAt' | 'campaignId' | 'canonicalId' | 'aliases'
+  | 'packId' | 'packVersion' | 'locale' | 'builtIn'
+> & {
+  id?: string;
+  campaignId?: string | null;
+  canonicalId?: string | null;
+  aliases?: readonly string[];
+  packId?: string | null;
+  packVersion?: string;
+  locale?: string;
+  builtIn?: boolean;
+};
 type NewEffect = Omit<ActiveEffect, 'id' | 'startEventId' | 'endEventId'> & {
   id?: string;
   concentratingCharacterId?: string;
@@ -59,6 +72,13 @@ export class CharacterDomainService {
         description: input.description.trim(),
         source: requiredText(input.source, 'Zdroj definice'),
         origin: requiredText(input.origin, 'Původ definice'),
+        campaignId: input.campaignId ?? null,
+        canonicalId: input.canonicalId ?? null,
+        aliases: input.aliases ?? [],
+        packId: input.packId ?? null,
+        packVersion: input.packVersion ?? 'homebrew',
+        locale: input.locale ?? 'cs',
+        builtIn: input.builtIn ?? false,
         createdAt: now,
         updatedAt: now,
       };

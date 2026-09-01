@@ -264,6 +264,7 @@ export interface DefinitionCardView extends EntityCardBase {
   source: string;
   origin: string;
   homebrew: boolean;
+  aliases: string[];
   metadata: Readonly<Record<string, unknown>> | null;
   characterState: Readonly<Record<string, unknown>> | null;
   linkedResources: CockpitResourceView[];

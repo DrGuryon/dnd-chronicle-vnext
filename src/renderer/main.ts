@@ -1,9 +1,11 @@
 import './styles.css';
 import type { BootstrapInfo, UpdateState } from '../shared/contracts';
 import type { CampaignLibraryView, RuntimeWorkspaceCampaign } from '../shared/chronicle-engine';
+import type { DefinitionCardView } from '../shared/read-models';
 import { AiChatController } from './ai-chat';
 import { AiSettingsController } from './ai-settings';
 import { CharacterCockpitController } from './character-cockpit';
+import { CharacterEditorDialog } from './character-editor-dialog';
 import { FormDialog } from './dialogs/form-dialog';
 import { EntityCardHost } from './entity-card';
 import { errorMessage, escapeHtml } from './html';
@@ -55,6 +57,7 @@ const settingsRoot = requireElement<HTMLElement>('[data-view-panel="settings"]')
 const cockpitPanel = requireElement<HTMLElement>('[data-cockpit-panel]');
 const cockpitRestore = requireElement<HTMLButtonElement>('[data-action="show-cockpit"]');
 const formDialog = new FormDialog(requireElement<HTMLDialogElement>('[data-form-dialog]'));
+const characterEditor = new CharacterEditorDialog(requireElement<HTMLDialogElement>('[data-form-dialog]'));
 const uiStore = new RendererUiStateStore(window.localStorage);
 let uiState: PersistedUiState = uiStore.load();
 let info: BootstrapInfo;
@@ -80,7 +83,10 @@ const aiChat = new AiChatController(requireElement<HTMLElement>('[data-ai-chat]'
   createConversation: () => void createConversation(),
 });
 const settings = new AiSettingsController(settingsRoot);
-new EntityCardHost(requireElement<HTMLDialogElement>('[data-entity-card-dialog]'));
+new EntityCardHost(requireElement<HTMLDialogElement>('[data-entity-card-dialog]'), {
+  editCharacter: (characterId) => void editCharacterById(characterId),
+  editHomebrewDefinition: (definition) => void editHomebrewDefinition(definition),
+});
 
 appRoot.addEventListener('click', (event) => void onClick(event));
 appRoot.addEventListener('change', (event) => void onChange(event));
@@ -167,6 +173,7 @@ async function onClick(event: MouseEvent): Promise<void> {
   if (action === 'rename-campaign') return renameCampaign(button.dataset.campaignId ?? '');
   if (action === 'archive-campaign') return archiveCampaign(button.dataset.campaignId ?? '');
   if (action === 'create-character') return createCharacter();
+  if (action === 'create-character-advanced') return createCharacter('advanced');
   if (action === 'edit-character') return editCharacter();
   if (action === 'create-conversation') return createConversation();
   if (action === 'rename-conversation') return renameConversation();
@@ -206,21 +213,26 @@ async function onChange(event: Event): Promise<void> {
 }
 
 async function createCampaign(): Promise<void> {
+  const rulesets = await window.chronicle.listRulesets();
+  const versions = rulesets.flatMap((ruleset) => ruleset.versions.map((version) => ({
+    value: `${ruleset.id}@${version.id}`,
+    label: `${ruleset.label} · ${version.label}`,
+  })));
+  const preferred = versions.find((item) => item.value === 'dnd5e@2024')?.value ?? versions[0]?.value;
+  if (!preferred) throw new Error('Není registrovaný žádný ruleset pro novou kampaň.');
   const created = await formDialog.open({
     title: 'Nová kampaň',
     description: 'Chronicle vytvoří prázdný lokální pracovní prostor bez seed dat.',
     submitLabel: 'Vytvořit kampaň',
     fields: [
       { name: 'name', label: 'Název kampaně', required: true, maxlength: 120, placeholder: 'Ravenford' },
-      { name: 'rulesetId', label: 'Ruleset', type: 'select', value: 'dnd5e', options: [{ value: 'dnd5e', label: 'D&D 5E' }] },
-      { name: 'rulesetVersion', label: 'Verze pravidel', type: 'select', value: '2024', options: [{ value: '2024', label: '2024' }, { value: '2014', label: '2014' }] },
+      { name: 'ruleset', label: 'Ruleset a verze', type: 'select', value: preferred, options: versions },
     ],
     validate: (values) => values.name.trim() ? {} : { name: 'Zadejte název kampaně.' },
-    submit: (values) => window.chronicle.createCampaign({
-      name: values.name,
-      rulesetId: 'dnd5e',
-      rulesetVersion: values.rulesetVersion as '2014' | '2024',
-    }),
+    submit: (values) => {
+      const [rulesetId, rulesetVersion] = values.ruleset.split('@');
+      return window.chronicle.createCampaign({ name: values.name, rulesetId: rulesetId!, rulesetVersion: rulesetVersion! });
+    },
   });
   if (!created) return;
   activeCampaignId = created.id;
@@ -264,32 +276,10 @@ async function archiveCampaign(campaignId: string): Promise<void> {
   await refreshCampaigns(null);
 }
 
-async function createCharacter(): Promise<void> {
+async function createCharacter(mode: 'quick' | 'advanced' = 'quick'): Promise<void> {
   const campaign = activeCampaign();
   if (!campaign) return createCampaign();
-  const created = await formDialog.open({
-    title: 'Nová hráčská postava',
-    description: 'Pro první hru stačí identita a základ. Zbytek doplníte později.',
-    submitLabel: 'Vytvořit postavu',
-    fields: [
-      { name: 'name', label: 'Jméno', section: '1 · Identita', required: true, maxlength: 120, placeholder: 'Arqos' },
-      { name: 'fullName', label: 'Celé jméno', maxlength: 160 },
-      { name: 'species', label: 'Druh', section: '2 · Základy', maxlength: 120, placeholder: 'Člověk' },
-      { name: 'background', label: 'Zázemí', maxlength: 120 },
-      { name: 'className', label: 'Povolání', maxlength: 120, placeholder: 'Bojovník' },
-      { name: 'level', label: 'Úroveň', type: 'number', value: 1, min: 1, max: 20, required: true },
-    ],
-    validate: (values) => values.name.trim() ? {} : { name: 'Zadejte jméno postavy.' },
-    submit: (values) => window.chronicle.createCharacter({
-      campaignId: campaign.id,
-      name: values.name,
-      fullName: values.fullName || null,
-      species: values.species || null,
-      background: values.background || null,
-      className: values.className || null,
-      level: Number(values.level),
-    }),
-  });
+  const created = await characterEditor.open(campaign, null, mode);
   if (created) {
     uiState.cockpitVisible = true;
     await refreshCampaigns(campaign.id);
@@ -300,19 +290,43 @@ async function editCharacter(): Promise<void> {
   const campaign = activeCampaign();
   const characterId = campaign?.runtime.activePlayerCharacterId;
   if (!campaign || !characterId) return;
-  const character = (await window.chronicle.listCampaignCharacters(campaign.id))
-    .find((item) => item.id === characterId);
-  if (!character) return;
+  await editCharacterById(characterId);
+}
+
+async function editCharacterById(characterId: string): Promise<void> {
+  const campaign = campaigns.find((candidate) => candidate.characters.some((character) => character.id === characterId));
+  if (!campaign) return;
+  const updated = await characterEditor.open(campaign, characterId, 'advanced');
+  if (updated) {
+    activeCampaignId = campaign.id;
+    await refreshCampaigns(campaign.id);
+  }
+}
+
+async function editHomebrewDefinition(definition: DefinitionCardView): Promise<void> {
+  const campaign = activeCampaign();
+  if (!campaign || !definition.homebrew) return;
   const updated = await formDialog.open({
-    title: 'Upravit identitu postavy', submitLabel: 'Uložit',
+    title: 'Upravit Homebrew definici',
+    description: 'Vestavěný katalog zůstává neměnný; tato úprava se týká pouze vašeho obsahu.',
+    submitLabel: 'Uložit',
     fields: [
-      { name: 'name', label: 'Jméno', value: character.name, required: true, maxlength: 120 },
-      { name: 'fullName', label: 'Celé jméno', value: character.fullName, maxlength: 160 },
+      { name: 'name', label: 'Název', value: definition.name, required: true, maxlength: 160 },
+      { name: 'description', label: 'Popis', value: definition.description, type: 'textarea', maxlength: 10_000 },
+      { name: 'aliases', label: 'Aliasy (oddělené čárkou)', value: definition.aliases.join(', '), maxlength: 2_000 },
     ],
-    validate: (values) => values.name.trim() ? {} : { name: 'Zadejte jméno postavy.' },
-    submit: (values) => window.chronicle.updateCharacterBasics({ characterId, name: values.name, fullName: values.fullName || null }),
+    submit: (values) => window.chronicle.updateHomebrewDefinition({
+      campaignId: campaign.id,
+      definitionId: definition.id,
+      name: values.name.trim(),
+      description: values.description.trim(),
+      aliases: values.aliases.split(',').map((alias) => alias.trim()).filter(Boolean),
+    }),
   });
-  if (updated) await refreshCampaigns(campaign.id);
+  if (updated) {
+    await refreshCampaigns(campaign.id);
+    showToast('Homebrew definice byla uložena.');
+  }
 }
 
 async function createConversation(): Promise<void> {

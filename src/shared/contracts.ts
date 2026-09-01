@@ -80,8 +80,8 @@ export interface CreateConversationCommand {
 
 export interface CreateCampaignCommand {
   name: string;
-  rulesetId: 'dnd5e';
-  rulesetVersion: '2014' | '2024';
+  rulesetId: string;
+  rulesetVersion: string;
 }
 
 export interface RenameCampaignCommand {
@@ -108,6 +108,14 @@ export interface UpdateCharacterBasicsCommand {
 export interface RenameConversationCommand {
   conversationId: string;
   title: string | null;
+}
+
+export interface UpdateHomebrewDefinitionCommand {
+  campaignId: string;
+  definitionId: string;
+  name: string;
+  description: string;
+  aliases?: string[];
 }
 
 export interface ChronicleApi {
@@ -148,6 +156,14 @@ export interface ChronicleApi {
   renameConversation(command: RenameConversationCommand): Promise<Conversation>;
   getConversationMessages(conversationId: string): Promise<ConversationMessage[]>;
   getCampaignLibrary(campaignId: string): Promise<CampaignLibraryView>;
+  listRulesets(): Promise<RulesetDescriptor[]>;
+  searchRuleDefinitions(query: RuleCatalogQuery): Promise<RuleCatalogResult>;
+  getCharacterEditor(characterId: string): Promise<CharacterEditorView | null>;
+  saveCharacterDraft(draft: CharacterDraft): Promise<{ view: CharacterEditorView; result: DataChangeTransactionResult }>;
+  updateHomebrewDefinition(command: UpdateHomebrewDefinitionCommand): Promise<DataChangeTransactionResult>;
+  getRuleReconciliationSuggestions(command: { campaignId: string; characterId?: string }): Promise<RuleReconciliationSuggestion[]>;
+  applyRuleReconciliation(suggestion: RuleReconciliationSuggestion): Promise<DataChangeTransactionResult>;
+  getDataChangeAudit(campaignId: string): Promise<DataChangeAuditTransaction[]>;
   getAiSettings(campaignId: string): Promise<CampaignAiSettings>;
   saveAiSettings(command: { campaignId: string; settings: CampaignAiSettingsUpdate }): Promise<CampaignAiSettings>;
   getAiSecretStatus(): Promise<AiSecretStatus>;
@@ -157,9 +173,9 @@ export interface ChronicleApi {
   testAiRuntime(campaignId: string): Promise<AiProviderConnectionResult>;
   startAiTurn(request: AiTurnRequest): Promise<{ runId: string }>;
   cancelAiTurn(runId: string): Promise<boolean>;
-  getPendingAiProposals(campaignId: string): Promise<PendingTurnProposal[]>;
+  getPendingAiProposals(campaignId: string): Promise<PendingAiProposal[]>;
   applyAiProposal(proposalId: string): Promise<AiProposalApplyResult>;
-  rejectAiProposal(proposalId: string): Promise<PendingTurnProposal>;
+  rejectAiProposal(proposalId: string): Promise<PendingAiProposal>;
   onAiTurnEvent(listener: (event: AiTurnClientEvent) => void): () => void;
   getSceneContext(campaignId: string): Promise<SceneContextView>;
   getChronicleToolCatalog(): Promise<ChronicleToolDescriptor[]>;
@@ -197,5 +213,15 @@ import type {
   AiTurnRequest,
   CampaignAiSettings,
   CampaignAiSettingsUpdate,
-  PendingTurnProposal,
+  PendingAiProposal,
 } from './ai';
+import type { RulesetDescriptor } from '../rules/registry';
+import type {
+  CharacterDraft,
+  CharacterEditorView,
+  DataChangeAuditTransaction,
+  DataChangeTransactionResult,
+  RuleCatalogQuery,
+  RuleCatalogResult,
+  RuleReconciliationSuggestion,
+} from './editable-domain';
