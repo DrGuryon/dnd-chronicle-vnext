@@ -16,6 +16,7 @@ import type {
   DataChangeValidationResult,
   ProposedDataChangeTransaction,
   CharacterEditorView,
+  RuleCatalogResult,
 } from '../../shared/editable-domain';
 import { ChronicleDatabase } from '../database';
 import { ChronicleEngineError } from '../engine/service';
@@ -161,29 +162,13 @@ export class AiTurnService {
           }
           if (call.name === 'chronicle.search_rule_definitions') {
             const query = ruleSearchValue(call.arguments, request.campaignId);
-            const campaign = this.database.domain.getCampaign(request.campaignId)!;
-            const output = this.database.rulesCatalog.search({
-              campaignId: request.campaignId,
-              rulesetId: campaign.rulesetId,
-              rulesetVersion: campaign.rulesetVersion,
-              definitionTypes: query.definitionTypes,
-              query: query.query,
-              includeHomebrew: query.includeHomebrew,
-              includeBuiltIn: true,
-              limit: query.limit ?? 60,
-            });
+            const output = this.searchRules(request.campaignId, query);
             return toolCache.store(call.name, call.arguments, { output, truncated: output.truncated });
           }
           if (call.name === 'chronicle.search_rule_definitions_batch') {
             const batch = ruleSearchBatchValue(call.arguments, request.campaignId);
-            const campaign = this.database.domain.getCampaign(request.campaignId)!;
             const output = {
-              results: batch.map((query) => ({ key: query.key, result: this.database.rulesCatalog.search({
-                campaignId: request.campaignId, rulesetId: campaign.rulesetId,
-                rulesetVersion: campaign.rulesetVersion, definitionTypes: query.definitionTypes,
-                query: query.query, includeHomebrew: query.includeHomebrew,
-                includeBuiltIn: true, limit: query.limit ?? 60,
-              }) })),
+              results: batch.map((query) => ({ key: query.key, result: this.searchRules(request.campaignId, query) })),
             };
             return toolCache.store(call.name, call.arguments, { output, truncated: output.results.some((item) => item.result.truncated) });
           }
@@ -387,6 +372,44 @@ export class AiTurnService {
       throw new ChronicleEngineError('INVALID_INPUT', 'Původní zprávu pro opakování tahu nelze bezpečně použít.');
     }
     return message;
+  }
+
+  private searchRules(
+    campaignId: string,
+    query: {
+      query: string | null;
+      definitionTypes: string[] | null;
+      includeHomebrew: boolean;
+      limit: number | null;
+    },
+  ): RuleCatalogResult {
+    const campaign = this.database.domain.getCampaign(campaignId)!;
+    const limit = Number.isSafeInteger(query.limit)
+      ? Math.min(100, Math.max(1, query.limit!))
+      : 60;
+    const global = this.database.dndpedia.search({
+      query: query.query,
+      definitionTypes: query.definitionTypes,
+      rulesetId: campaign.rulesetId,
+      rulesetVersion: campaign.rulesetVersion,
+      page: 1,
+      pageSize: limit,
+    });
+    const builtIns = global.items.map((item) => this.database.rulesCatalog.get(item.definitionId))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const homebrew = query.includeHomebrew ? this.database.rulesCatalog.search({
+      campaignId,
+      rulesetId: campaign.rulesetId,
+      rulesetVersion: campaign.rulesetVersion,
+      definitionTypes: query.definitionTypes,
+      query: query.query,
+      includeHomebrew: true,
+      includeBuiltIn: false,
+      limit,
+    }) : { items: [], total: 0, truncated: false };
+    const items = [...builtIns, ...homebrew.items].slice(0, limit);
+    const total = global.totalItems + homebrew.total;
+    return { items, total, truncated: total > items.length };
   }
 }
 

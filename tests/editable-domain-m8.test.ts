@@ -30,7 +30,7 @@ describe('Milestone 8 editable Chronicle domain', () => {
       expect(dwarves.items).toHaveLength(1);
       expect(dwarves.items[0]).toMatchObject({
         id: 'def_dnd5e_2024_species_dwarf', name: 'Dwarf', builtIn: true,
-        packId: 'dnd5e-srd-5.2.1', packVersion: '1.0.0',
+        packId: 'dnd5e-srd-5.2.1', packVersion: '2.0.0',
       });
       const ids = database.rulesCatalog.search({
         rulesetId: 'dnd5e', rulesetVersion: '2024', includeBuiltIn: true,

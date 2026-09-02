@@ -39,6 +39,7 @@ import type { EntityCardKind, EntitySummary } from '../../shared/read-models';
 import { CharacterDomainService } from '../character/service';
 import { ChronicleDomainService } from '../domain/service';
 import { ActorRelationshipService } from '../relationships/service';
+import type { DndpediaService } from '../rules/dndpedia-service';
 
 const DEFAULT_MAX_RESULTS = 10;
 const MAX_RESULTS = 100;
@@ -83,6 +84,7 @@ export class ChronicleEngineService {
     private readonly domain: ChronicleDomainService,
     private readonly characters: CharacterDomainService,
     private readonly relationships: ActorRelationshipService,
+    private readonly dndpedia?: DndpediaService,
   ) {
     this.tools = this.createTools();
   }
@@ -296,12 +298,13 @@ export class ChronicleEngineService {
       description: string;
     }>;
     const campaign = this.domain.getCampaign(campaignId)!;
-    const definitions = this.database.prepare(`
+    const homebrewDefinitions = this.database.prepare(`
       SELECT id, definition_type AS definitionType, name, description
       FROM rule_definitions
       WHERE ruleset_id = ? AND ruleset_version = ?
+        AND is_homebrew = 1 AND is_builtin = 0 AND campaign_id = ?
       ORDER BY name COLLATE NOCASE, id
-    `).all(campaign.rulesetId, campaign.rulesetVersion) as unknown as Array<{
+    `).all(campaign.rulesetId, campaign.rulesetVersion, campaignId) as unknown as Array<{
       id: string;
       definitionType: string;
       name: string;
@@ -323,9 +326,9 @@ export class ChronicleEngineService {
         { id: 'items', label: 'Předměty', items: itemsFor('Item') },
         { id: 'locations', label: 'Lokace', items: itemsFor('Location') },
         {
-          id: 'definitions',
-          label: 'Pravidla a definice',
-          items: definitions.map((row) => ({
+          id: 'homebrew',
+          label: 'Kampaňové Homebrew',
+          items: homebrewDefinitions.map((row) => ({
             id: row.id,
             kind: row.definitionType as EntityCardKind,
             label: row.name,
@@ -640,7 +643,12 @@ export class ChronicleEngineService {
   getDefinition(definitionId: string) {
     const definition = this.characters.getDefinition(definitionId);
     if (!definition) throw new ChronicleEngineError('ENTITY_NOT_FOUND', `Definition ${definitionId} neexistuje.`);
-    return definition;
+    if (!definition.builtIn || !this.dndpedia) return definition;
+    try {
+      return { ...definition, dndpedia: this.dndpedia.get(definition.id) };
+    } catch {
+      return { ...definition, dndpedia: null };
+    }
   }
 
   getRelations(input: {

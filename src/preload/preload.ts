@@ -126,6 +126,12 @@ const api: ChronicleApi = {
   getCampaignLibrary: (campaignId) => ipcRenderer.invoke(
     'library:get-campaign', campaignId,
   ) as ReturnType<ChronicleApi['getCampaignLibrary']>,
+  searchDndpedia: (query) => ipcRenderer.invoke(
+    'dndpedia:search', query,
+  ) as ReturnType<ChronicleApi['searchDndpedia']>,
+  getDndpediaEntry: (request) => ipcRenderer.invoke(
+    'dndpedia:get-entry', request,
+  ) as ReturnType<ChronicleApi['getDndpediaEntry']>,
   listRulesets: () => ipcRenderer.invoke('rules:list-rulesets') as ReturnType<ChronicleApi['listRulesets']>,
   searchRuleDefinitions: (query) => ipcRenderer.invoke(
     'rules:search-definitions', query,

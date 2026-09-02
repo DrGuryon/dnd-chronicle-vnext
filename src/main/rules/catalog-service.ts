@@ -69,7 +69,7 @@ export class RulesCatalogService {
     const sourceClauses: string[] = [];
     if (input.includeBuiltIn !== false) sourceClauses.push('is_builtin = 1');
     if (input.includeHomebrew !== false && input.campaignId) {
-      sourceClauses.push('(is_homebrew = 1 AND (campaign_id = ? OR campaign_id IS NULL))');
+      sourceClauses.push('(is_homebrew = 1 AND is_builtin = 0 AND campaign_id = ?)');
       values.push(input.campaignId);
     }
     if (sourceClauses.length === 0) return { items: [], total: 0, truncated: false };

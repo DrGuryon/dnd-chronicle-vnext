@@ -2,14 +2,23 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { builtInRuleDefinitions, builtInRuleRelations } from '../../rules/builtin-catalog';
+import { builtInRuleContent, builtInRuleDefinitions, builtInRuleRelations } from '../../rules/builtin-catalog';
 import { listBuiltInRulesets } from '../../rules/registry';
-import type { RulesPack, RulesPackStatus, RulesPackUpdateResult } from '../../shared/rules-packs';
+import {
+  ruleDefinitionRelationTypes,
+  type RulesPack,
+  type RulesPackDefinition,
+  type RulesPackStatus,
+  type RulesPackTypedContent,
+  type RulesPackUpdateResult,
+} from '../../shared/rules-packs';
 import type { AppLogService } from '../app-log/service';
+import { rebuildDndpediaSearchIndex } from './dndpedia-index';
 
 interface PackRow {
   pack_id: string;
   version: string;
+  schema_version: 1 | 3;
   display_name: string;
   ruleset_version: string;
   license: string;
@@ -44,6 +53,10 @@ export class RulesPackService {
         await this.install(pack);
         continue;
       }
+      if (active.packId === pack.manifest.packId && compareVersions(active.version, pack.manifest.version) < 0) {
+        await this.install(pack);
+        continue;
+      }
       try {
         const filePath = path.join(this.directory, safeSegment(active.packId), safeSegment(active.version), 'pack.json');
         const stored = JSON.parse(await readFile(filePath, 'utf8')) as RulesPack;
@@ -56,11 +69,14 @@ export class RulesPackService {
         await this.install(pack, true);
       }
     }
+    // FTS je odvozený index. Jeho obnova při startu opraví i ruční poškození
+    // bez zásahu do zdrojových definic nebo aktivních verzí balíčků.
+    rebuildDndpediaSearchIndex(this.database);
   }
 
   list(): RulesPackStatus[] {
     const rows = this.database.prepare(`
-      SELECT pack_id, version, display_name, ruleset_version, license, attribution,
+      SELECT pack_id, version, schema_version, display_name, ruleset_version, license, attribution,
              source_url, update_url, content_hash, installed_at, activated_at, active
       FROM rules_pack_installations ORDER BY ruleset_version, installed_at DESC
     `).all() as unknown as PackRow[];
@@ -130,6 +146,7 @@ export class RulesPackService {
       tempPath = undefined;
 
       const now = new Date().toISOString();
+      this.assertStableDefinitionIdentities(pack);
       const previous = this.database.prepare(`
         SELECT version FROM rules_pack_installations
         WHERE ruleset_id = ? AND ruleset_version = ? AND active = 1
@@ -165,9 +182,10 @@ export class RulesPackService {
             id, definition_type, ruleset_id, ruleset_version, name, description,
             source, origin, metadata, is_homebrew, created_at, updated_at,
             campaign_id, canonical_id, aliases, pack_id, pack_version, locale, is_builtin
-          ) VALUES (?, ?, ?, ?, ?, '', ?, 'builtin', ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?, 1)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'builtin', ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?, 1)
           ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name, source = excluded.source, metadata = excluded.metadata,
+            name = excluded.name, description = excluded.description,
+            source = excluded.source, metadata = excluded.metadata,
             canonical_id = excluded.canonical_id, aliases = excluded.aliases,
             pack_id = excluded.pack_id, pack_version = excluded.pack_version,
             locale = excluded.locale, updated_at = excluded.updated_at, is_builtin = 1
@@ -175,10 +193,49 @@ export class RulesPackService {
         for (const definition of pack.payload.definitions) {
           upsert.run(
             definition.id, definition.definitionType, definition.rulesetId, definition.rulesetVersion,
-            definition.name, definition.source,
+            definition.name, definition.shortDescription ?? '', definition.source,
             JSON.stringify({ license: pack.manifest.license, attribution: pack.manifest.attribution }),
             now, now, definition.canonicalId, JSON.stringify(definition.aliases),
             pack.manifest.packId, pack.manifest.version, definition.locale,
+          );
+        }
+        const upsertDocument = this.database.prepare(`
+          INSERT INTO rule_definition_documents(
+            definition_id, content_schema_version, locale, completeness,
+            full_description, content_json, search_text, content_hash,
+            source_reference, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(definition_id, locale) DO UPDATE SET
+            content_schema_version = excluded.content_schema_version,
+            completeness = excluded.completeness,
+            full_description = excluded.full_description,
+            content_json = excluded.content_json,
+            search_text = excluded.search_text,
+            content_hash = excluded.content_hash,
+            source_reference = excluded.source_reference,
+            updated_at = excluded.updated_at
+        `);
+        const deleteDocument = this.database.prepare(`
+          DELETE FROM rule_definition_documents WHERE definition_id = ? AND locale = ?
+        `);
+        for (const definition of pack.payload.definitions) {
+          if (pack.manifest.schemaVersion === 1) {
+            deleteDocument.run(definition.id, definition.locale);
+            continue;
+          }
+          const documentValue = {
+            completeness: definition.completeness ?? 'partial',
+            fullDescription: definition.fullDescription ?? '',
+            typedContent: definition.typedContent ?? null,
+            searchText: definition.searchText ?? '',
+            sourceReference: definition.sourceReference ?? null,
+          };
+          upsertDocument.run(
+            definition.id, definition.contentSchemaVersion ?? 1, definition.locale,
+            definition.completeness ?? 'partial', definition.fullDescription ?? '',
+            definition.typedContent ? JSON.stringify(definition.typedContent) : null,
+            definition.searchText ?? '', hashValue(documentValue),
+            definition.sourceReference ?? null, now, now,
           );
         }
         const deleteRelations = this.database.prepare(`
@@ -195,6 +252,7 @@ export class RulesPackService {
             relation.metadata ? JSON.stringify(relation.metadata) : null,
           );
         }
+        rebuildDndpediaSearchIndex(this.database);
         this.database.prepare('UPDATE rules_pack_update_guard SET enabled = 0 WHERE id = 1').run();
         this.database.exec('COMMIT;');
       } catch (error) {
@@ -222,17 +280,56 @@ export class RulesPackService {
 
   private requireStatus(packId: string, version: string): RulesPackStatus {
     const row = this.database.prepare(`
-      SELECT pack_id, version, display_name, ruleset_version, license, attribution,
+      SELECT pack_id, version, schema_version, display_name, ruleset_version, license, attribution,
              source_url, update_url, content_hash, installed_at, activated_at, active
       FROM rules_pack_installations WHERE pack_id = ? AND version = ?
     `).get(packId, version) as unknown as PackRow | undefined;
     if (!row) throw new Error('Instalace balíčku pravidel nebyla nalezena.');
     return mapStatus(row);
   }
+
+  private assertStableDefinitionIdentities(pack: RulesPack): void {
+    const select = this.database.prepare(`
+      SELECT canonical_id AS canonicalId, definition_type AS definitionType,
+             ruleset_id AS rulesetId, ruleset_version AS rulesetVersion
+      FROM rule_definitions WHERE id = ?
+    `);
+    for (const definition of pack.payload.definitions) {
+      const existing = select.get(definition.id) as unknown as {
+        canonicalId: string | null;
+        definitionType: string;
+        rulesetId: string;
+        rulesetVersion: string;
+      } | undefined;
+      if (!existing) continue;
+      if (existing.canonicalId !== definition.canonicalId
+        || existing.definitionType !== definition.definitionType
+        || existing.rulesetId !== definition.rulesetId
+        || existing.rulesetVersion !== definition.rulesetVersion) {
+        throw new Error(`Balíček mění stabilní identitu definice ${definition.id}.`);
+      }
+    }
+  }
 }
 
 export function bundledRulesPacks(): RulesPack[] {
-  const definitions = builtInRuleDefinitions();
+  const definitions: RulesPackDefinition[] = builtInRuleDefinitions().map((definition) => {
+    const slug = definition.canonicalId.split(':').at(-1)!;
+    const content = builtInRuleContent(definition.rulesetVersion, definition.definitionType, slug);
+    return {
+      ...definition,
+      aliases: [...definition.aliases],
+      shortDescription: content?.shortDescription ?? '',
+      completeness: content ? 'full' : 'partial',
+      contentSchemaVersion: 1,
+      fullDescription: content?.fullDescription ?? '',
+      ...(content ? {
+        typedContent: content.typedContent,
+        searchText: content.searchText,
+        sourceReference: content.sourceReference,
+      } : {}),
+    };
+  });
   const relations = builtInRuleRelations();
   return listBuiltInRulesets().flatMap((ruleset) => ruleset.versions.map((version) => {
     const payload = {
@@ -241,19 +338,21 @@ export function bundledRulesPacks(): RulesPack[] {
     };
     return {
       manifest: {
-        schemaVersion: 1,
+        schemaVersion: 3,
         packId: version.catalogPackId,
         version: version.catalogPackVersion,
         rulesetId: ruleset.id,
         rulesetVersion: version.id,
         displayName: version.sourceLabel,
         license: 'CC BY 4.0',
-        attribution: 'Dungeons & Dragons System Reference Document, Wizards of the Coast LLC.',
+        attribution: version.id === '2014'
+          ? 'This work includes material from the System Reference Document 5.1 (SRD 5.1) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.1 is licensed under CC BY 4.0, available at https://creativecommons.org/licenses/by/4.0/legalcode.'
+          : 'This work includes material from the System Reference Document 5.2.1 (SRD 5.2.1) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under CC BY 4.0, available at https://creativecommons.org/licenses/by/4.0/legalcode.',
         sourceUrl: version.id === '2014'
           ? 'https://www.dndbeyond.com/resources/1781-systems-reference-document-srd'
           : 'https://www.dndbeyond.com/srd',
         updateUrl: `https://raw.githubusercontent.com/DrGuryon/dnd-chronicle-vnext/main/rules-packs/${version.catalogPackId}/latest.json`,
-        publishedAt: version.id === '2014' ? '2023-01-27T00:00:00.000Z' : '2025-04-22T00:00:00.000Z',
+        publishedAt: version.id === '2014' ? '2023-01-27T00:00:00.000Z' : '2025-05-01T00:00:00.000Z',
         contentHash: hashPayload(payload),
       },
       payload,
@@ -262,7 +361,9 @@ export function bundledRulesPacks(): RulesPack[] {
 }
 
 export function validatePack(pack: RulesPack): void {
-  if (pack.manifest.schemaVersion !== 1) throw new Error('Nepodporované schéma balíčku pravidel.');
+  if (pack.manifest.schemaVersion !== 1 && pack.manifest.schemaVersion !== 3) {
+    throw new Error('Nepodporované schéma balíčku pravidel.');
+  }
   if (!pack.manifest.packId.trim() || !pack.manifest.version.trim()) throw new Error('Balíčku chybí identita nebo verze.');
   if (hashPayload(pack.payload) !== pack.manifest.contentHash) throw new Error('Kontrolní součet balíčku pravidel nesouhlasí.');
   const ids = new Set<string>();
@@ -276,11 +377,19 @@ export function validatePack(pack: RulesPack): void {
     if (definition.packId !== pack.manifest.packId || definition.packVersion !== pack.manifest.version) {
       throw new Error('Definice neodpovídá identitě nebo verzi balíčku.');
     }
+    if (!definition.id.trim() || !definition.canonicalId.trim() || !definition.name.trim()
+      || !definition.definitionType.trim() || !definition.locale.trim()) {
+      throw new Error('Definice nemá úplnou identitu.');
+    }
+    if (!Array.isArray(definition.aliases) || definition.aliases.some((alias) => typeof alias !== 'string')) {
+      throw new Error('Definice obsahuje neplatné aliasy.');
+    }
+    if (pack.manifest.schemaVersion === 3) validateContentDocument(definition);
     ids.add(definition.id);
     canonicalIds.add(definition.canonicalId);
   }
   const relationKeys = new Set<string>();
-  const allowedRelations = new Set(['belongsToSpecies', 'belongsToRace', 'belongsToClass', 'requiresDefinition', 'compatibleWith', 'incompatibleWith']);
+  const allowedRelations = new Set<string>(ruleDefinitionRelationTypes);
   for (const relation of pack.payload.relations) {
     if (!ids.has(relation.sourceDefinitionId) || !ids.has(relation.targetDefinitionId)) {
       throw new Error('Balíček obsahuje vztah na neexistující definici.');
@@ -293,7 +402,11 @@ export function validatePack(pack: RulesPack): void {
 }
 
 function hashPayload(payload: RulesPack['payload']): string {
-  return `sha256:${createHash('sha256').update(stableStringify(payload)).digest('hex')}`;
+  return hashValue(payload);
+}
+
+function hashValue(value: unknown): string {
+  return `sha256:${createHash('sha256').update(stableStringify(value)).digest('hex')}`;
 }
 
 function stableStringify(value: unknown): string {
@@ -311,9 +424,131 @@ function safeSegment(value: string): string {
 
 function mapStatus(row: PackRow): RulesPackStatus {
   return {
-    packId: row.pack_id, version: row.version, displayName: row.display_name,
+    packId: row.pack_id, version: row.version, schemaVersion: row.schema_version, displayName: row.display_name,
     rulesetVersion: row.ruleset_version, license: row.license, attribution: row.attribution,
     sourceUrl: row.source_url, updateUrl: row.update_url, contentHash: row.content_hash, installedAt: row.installed_at,
     activatedAt: row.activated_at, active: row.active === 1,
   };
+}
+
+function validateContentDocument(definition: RulesPackDefinition): void {
+  if (definition.contentSchemaVersion !== 1) throw new Error('Definice má nepodporované schéma obsahu.');
+  if (definition.completeness !== 'full' && definition.completeness !== 'partial') {
+    throw new Error('Definice nemá platný stav úplnosti.');
+  }
+  if (typeof definition.shortDescription !== 'string' || definition.shortDescription.length > 2_000) {
+    throw new Error('Definice má neplatný krátký popis.');
+  }
+  if (typeof definition.fullDescription !== 'string' || definition.fullDescription.length > 100_000) {
+    throw new Error('Definice má neplatný úplný popis.');
+  }
+  if (definition.completeness === 'full') {
+    if (!definition.fullDescription.trim() || !definition.typedContent) {
+      throw new Error('Úplné definici chybí validovaný strukturovaný obsah.');
+    }
+    validateTypedContent(definition.definitionType, definition.typedContent);
+  } else if (definition.typedContent) {
+    validateTypedContent(definition.definitionType, definition.typedContent);
+  }
+  if (definition.searchText !== undefined && (typeof definition.searchText !== 'string' || definition.searchText.length > 50_000)) {
+    throw new Error('Definice má neplatný vyhledávací text.');
+  }
+  if (definition.sourceReference !== undefined && (typeof definition.sourceReference !== 'string' || definition.sourceReference.length > 1_000)) {
+    throw new Error('Definice má neplatný odkaz na zdroj.');
+  }
+}
+
+function validateTypedContent(definitionType: string, content: RulesPackTypedContent): void {
+  if (!content || typeof content !== 'object') throw new Error('Strukturovaný obsah není objekt.');
+  const value = content as unknown as Record<string, unknown>;
+  const kind = value.kind;
+  const compatible = kind === definitionType
+    || (['Species', 'Race'].includes(definitionType) && (kind === 'Species' || kind === 'Race'))
+    || (kind === 'Generic' && value.definitionType === definitionType);
+  if (!compatible) throw new Error(`Strukturovaný obsah neodpovídá typu ${definitionType}.`);
+  if (value.sections !== undefined) {
+    if (!Array.isArray(value.sections) || value.sections.some((candidate) => {
+      if (!candidate || typeof candidate !== 'object') return true;
+      const section = candidate as Record<string, unknown>;
+      return !nonEmptyText(section.id) || !nonEmptyText(section.title) || !Array.isArray(section.paragraphs)
+        || section.paragraphs.length === 0 || section.paragraphs.some((paragraph) => !nonEmptyText(paragraph));
+    })) throw new Error('Strukturovaný obsah má neplatné sekce.');
+  }
+  switch (kind) {
+    case 'Spell':
+      if (!Number.isInteger(value.level) || (value.level as number) < 0 || (value.level as number) > 9
+        || !requiredTexts(value, ['school', 'castingTime', 'range', 'duration'])
+        || !stringArray(value.components, false) || typeof value.concentration !== 'boolean'
+        || (value.ritual !== undefined && typeof value.ritual !== 'boolean')
+        || !optionalTexts(value, ['savingThrow', 'attackType', 'damageOrHealing'])) {
+        throw new Error('Kouzlo má neplatný strukturovaný obsah.');
+      }
+      break;
+    case 'Weapon':
+      if (!requiredTexts(value, ['category', 'damage', 'damageType']) || !stringArray(value.properties, true)
+        || !optionalTexts(value, ['mastery', 'cost', 'weight'])) {
+        throw new Error('Zbraň má neplatný strukturovaný obsah.');
+      }
+      break;
+    case 'Armor':
+      if (!requiredTexts(value, ['category', 'armorClass', 'stealth'])
+        || !optionalTexts(value, ['strength', 'cost', 'weight', 'don', 'doff'])) {
+        throw new Error('Zbroj má neplatný strukturovaný obsah.');
+      }
+      break;
+    case 'Species':
+    case 'Race':
+      if (!requiredTexts(value, ['size', 'speed']) || !optionalTexts(value, ['creatureType'])
+        || !optionalStringArrays(value, ['senses', 'defenses', 'languages'])) {
+        throw new Error('Druh nebo rasa má neplatný strukturovaný obsah.');
+      }
+      break;
+    case 'Class':
+      if (!requiredTexts(value, ['hitDie']) || !stringArray(value.primaryAbilities, false)
+        || !stringArray(value.savingThrows, false) || !stringArray(value.armorTraining, true)
+        || !stringArray(value.weaponProficiencies, false) || !optionalTexts(value, ['spellcasting'])) {
+        throw new Error('Povolání má neplatný strukturovaný obsah.');
+      }
+      break;
+    case 'Generic':
+      if (!Array.isArray(value.facts) || value.facts.some((candidate) => {
+        if (!candidate || typeof candidate !== 'object') return true;
+        const item = candidate as Record<string, unknown>;
+        return !nonEmptyText(item.key) || !nonEmptyText(item.value);
+      })) throw new Error('Obecný strukturovaný obsah má neplatná fakta.');
+      break;
+    default:
+      throw new Error('Strukturovaný obsah má nepodporovaný typ.');
+  }
+}
+
+function nonEmptyText(value: unknown): value is string {
+  return typeof value === 'string' && Boolean(value.trim());
+}
+
+function requiredTexts(value: Record<string, unknown>, keys: string[]): boolean {
+  return keys.every((key) => nonEmptyText(value[key]));
+}
+
+function optionalTexts(value: Record<string, unknown>, keys: string[]): boolean {
+  return keys.every((key) => value[key] === undefined || value[key] === null || nonEmptyText(value[key]));
+}
+
+function stringArray(value: unknown, allowEmpty: boolean): value is string[] {
+  return Array.isArray(value) && (allowEmpty || value.length > 0) && value.every(nonEmptyText);
+}
+
+function optionalStringArrays(value: Record<string, unknown>, keys: string[]): boolean {
+  return keys.every((key) => value[key] === undefined || stringArray(value[key], true));
+}
+
+function compareVersions(left: string, right: string): number {
+  const parse = (value: string): number[] => value.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const a = parse(left);
+  const b = parse(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference) return difference;
+  }
+  return 0;
 }

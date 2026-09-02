@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DefinitionType } from '../domain/character-models';
-import type { RuleDefinitionRelation } from '../shared/rules-packs';
+import type { RuleDefinitionRelation, RulesPackTypedContent } from '../shared/rules-packs';
 import { listBuiltInRulesets } from './registry';
 
 export interface BuiltInRuleDefinition {
@@ -17,7 +17,7 @@ export interface BuiltInRuleDefinition {
   locale: string;
 }
 
-type CatalogEntry = readonly [DefinitionType, string, string, (readonly string[])?];
+type CatalogEntry = readonly [DefinitionType, string, string, (readonly string[])?, (readonly string[])?];
 
 const commonEntries: readonly CatalogEntry[] = [
   ['Species', 'human', 'Human', ['Člověk']],
@@ -124,11 +124,114 @@ const commonEntries: readonly CatalogEntry[] = [
   ['Spell', 'mage-hand', 'Mage Hand', ['Mágova ruka']],
   ['Spell', 'magic-missile', 'Magic Missile', ['Magická střela']],
   ['Spell', 'shield', 'Shield', ['Štít']],
+  ['WeaponCategory', 'martial-melee', 'Martial Melee Weapons', ['Válečné zbraně na blízko']],
+  ['Property', 'versatile', 'Versatile', ['Obouruční použití']],
+  ['Weapon', 'longsword', 'Longsword', ['Dlouhý meč']],
+  ['Armor', 'chain-mail', 'Chain Mail', ['Kroužková zbroj']],
+  ['Equipment', 'hempen-rope', 'Rope, Hempen', ['Konopné lano']],
+  ['Tool', 'thieves-tools', "Thieves' Tools", ['Zlodějské náčiní']],
+  ['Vehicle', 'rowboat', 'Rowboat', ['Veslice']],
+  ['CreatureDefinition', 'goblin', 'Goblin', ['Goblin']],
+  ['Rule', 'concentration', 'Concentration', ['Soustředění']],
+  ['Mastery', 'sap', 'Sap', ['Oslabení'], ['2024']],
 ] as const;
+
+type ContentEntry = readonly [
+  string,
+  DefinitionType,
+  string,
+  string,
+  string,
+  string,
+  string,
+  RulesPackTypedContent,
+];
+
+const contentEntries: readonly ContentEntry[] = [
+  ['2024', 'Spell', 'fireball',
+    'A mote of fire erupts at a point in range and engulfs nearby creatures in flame.',
+    'Each creature in the spell area makes a Dexterity saving throw, taking fire damage on a failed save or half as much on a successful one. The damage increases when the spell is cast with a higher-level slot.',
+    'explosion sphere dexterity save fire damage higher level', 'Spells · Fireball',
+    { kind: 'Spell', level: 3, school: 'Evocation', castingTime: '1 action', range: '150 ft', components: ['V', 'S', 'M'], duration: 'Instantaneous', concentration: false, ritual: false, savingThrow: 'Dexterity', damageOrHealing: '8d6 Fire' }],
+  ['2014', 'Spell', 'fireball',
+    'A bright streak blossoms into a fiery explosion at a point within range.',
+    'Creatures in the area make a Dexterity saving throw. A creature takes fire damage on a failed save and half as much on a successful one; higher-level spell slots increase the damage.',
+    'explosion sphere dexterity save fire damage higher level', 'Spells · Fireball',
+    { kind: 'Spell', level: 3, school: 'Evocation', castingTime: '1 action', range: '150 ft', components: ['V', 'S', 'M'], duration: 'Instantaneous', concentration: false, ritual: false, savingThrow: 'Dexterity', damageOrHealing: '8d6 Fire' }],
+  ['2024', 'Spell', 'cure-wounds',
+    'Restorative magic heals a creature you touch.',
+    'A creature touched by the caster regains hit points. Casting the spell with a higher-level slot increases the amount restored.',
+    'healing touch hit points higher level', 'Spells · Cure Wounds',
+    { kind: 'Spell', level: 1, school: 'Abjuration', castingTime: '1 action', range: 'Touch', components: ['V', 'S'], duration: 'Instantaneous', concentration: false, ritual: false, damageOrHealing: '2d8 + spellcasting ability modifier healing' }],
+  ['2014', 'Spell', 'cure-wounds',
+    'A creature you touch regains hit points through restorative magic.',
+    'The touched creature regains hit points. The healing increases for each spell slot level above first.',
+    'healing touch hit points higher level', 'Spells · Cure Wounds',
+    { kind: 'Spell', level: 1, school: 'Evocation', castingTime: '1 action', range: 'Touch', components: ['V', 'S'], duration: 'Instantaneous', concentration: false, ritual: false, damageOrHealing: '1d8 + spellcasting ability modifier healing' }],
+  ['2024', 'Species', 'dwarf',
+    'Dwarves are hardy humanoids whose traits emphasize resilience and a bond with stone.',
+    'The dwarf species entry defines size, speed, darkvision, resilience against poison, and the Stonecunning trait. Individual characters reference this stable definition rather than copying its rules text.',
+    'dwarf darkvision poison resilience stonecunning', 'Character Origins · Dwarf',
+    { kind: 'Species', size: 'Medium', speed: '30 ft', creatureType: 'Humanoid', senses: ['Darkvision 120 ft'], defenses: ['Poison resistance'], languages: ['Common', 'one additional language'] }],
+  ['2014', 'Species', 'elf',
+    'Elves are graceful, long-lived humanoids with keen senses and an affinity for magic.',
+    'The elf entry groups shared ancestry traits such as darkvision, keen senses, Fey Ancestry, and Trance. Available lineages remain separate related definitions.',
+    'elf darkvision keen senses fey ancestry trance', 'Races · Elf',
+    { kind: 'Race', size: 'Medium', speed: '30 ft', creatureType: 'Humanoid', senses: ['Darkvision 60 ft', 'Keen Senses'], defenses: ['Fey Ancestry'], languages: ['Common', 'Elvish'] }],
+  ['2024', 'Class', 'wizard',
+    'A Wizard studies arcane magic and prepares spells from a spellbook.',
+    'Wizard progression uses Intelligence, a d6 Hit Point Die, prepared spellcasting, and a spellbook. Features and the Evoker subclass are represented by related definitions.',
+    'wizard intelligence spellbook prepared arcane magic', 'Classes · Wizard',
+    { kind: 'Class', hitDie: 'd6', primaryAbilities: ['Intelligence'], savingThrows: ['Intelligence', 'Wisdom'], armorTraining: [], weaponProficiencies: ['Simple weapons'], spellcasting: 'Prepared arcane spells from a spellbook' }],
+  ['2014', 'Class', 'paladin',
+    'A Paladin is a divine warrior empowered by sacred oaths.',
+    'Paladins combine martial training, healing, divine magic, and an oath. Their spellcasting uses Charisma and their class progression uses a d10 Hit Die.',
+    'paladin sacred oath divine martial charisma', 'Classes · Paladin',
+    { kind: 'Class', hitDie: 'd10', primaryAbilities: ['Strength', 'Charisma'], savingThrows: ['Wisdom', 'Charisma'], armorTraining: ['All armor', 'Shields'], weaponProficiencies: ['Simple weapons', 'Martial weapons'], spellcasting: 'Prepared divine spells using Charisma' }],
+  ['2014', 'Background', 'acolyte',
+    'A life of service in a temple or religious community shapes this background.',
+    'The Acolyte background provides Insight and Religion proficiency, two languages, starting equipment, and the Shelter of the Faithful feature.',
+    'acolyte insight religion languages shelter faithful', 'Backgrounds · Acolyte',
+    { kind: 'Generic', definitionType: 'Background', facts: [{ key: 'skills', value: 'Insight, Religion' }, { key: 'languages', value: 'Two' }, { key: 'feature', value: 'Shelter of the Faithful' }] }],
+  ['2024', 'Weapon', 'longsword',
+    'A versatile martial melee weapon that deals slashing damage.',
+    'A longsword deals 1d8 Slashing damage in one hand or 1d10 when used with two hands through the Versatile property. Its 2024 mastery property is Sap.',
+    'longsword martial melee versatile sap slashing', 'Equipment · Weapons · Longsword',
+    { kind: 'Weapon', category: 'Martial melee', damage: '1d8 (1d10 versatile)', damageType: 'Slashing', properties: ['Versatile'], mastery: 'Sap', cost: '15 GP', weight: '3 lb' }],
+  ['2014', 'Weapon', 'longsword',
+    'A versatile martial melee weapon that deals slashing damage.',
+    'A longsword deals 1d8 Slashing damage in one hand. The Versatile property raises its damage die to 1d10 when wielded with two hands.',
+    'longsword martial melee versatile slashing', 'Equipment · Weapons · Longsword',
+    { kind: 'Weapon', category: 'Martial melee', damage: '1d8 (1d10 versatile)', damageType: 'Slashing', properties: ['Versatile'], cost: '15 GP', weight: '3 lb' }],
+  ['2024', 'Armor', 'chain-mail',
+    'Heavy armor made from interlocking metal rings.',
+    'Chain Mail sets base Armor Class to 16. A wearer below Strength 13 has reduced speed, and the armor imposes Disadvantage on Stealth checks.',
+    'chain mail heavy armor strength stealth', 'Equipment · Armor · Chain Mail',
+    { kind: 'Armor', category: 'Heavy armor', armorClass: '16', strength: '13', stealth: 'Disadvantage', cost: '75 GP', weight: '55 lb', don: '10 minutes', doff: '5 minutes' }],
+  ['2014', 'Armor', 'chain-mail',
+    'Heavy armor made from interlocking metal rings over quilted fabric.',
+    'Chain Mail provides Armor Class 16, requires Strength 13 to avoid a speed penalty, and imposes Disadvantage on Stealth checks.',
+    'chain mail heavy armor strength stealth', 'Equipment · Armor · Chain Mail',
+    { kind: 'Armor', category: 'Heavy armor', armorClass: '16', strength: '13', stealth: 'Disadvantage', cost: '75 GP', weight: '55 lb', don: '10 minutes', doff: '5 minutes' }],
+  ['2024', 'Rule', 'concentration',
+    'Concentration governs how a creature maintains certain spells and effects.',
+    'A creature can concentrate on only one effect at a time. Taking damage can require a Constitution saving throw to maintain concentration, and several other events can end it.',
+    'concentration constitution saving throw damage spell effect', 'Rules Glossary · Concentration',
+    { kind: 'Generic', definitionType: 'Rule', facts: [{ key: 'category', value: 'Spellcasting' }, { key: 'simultaneousEffects', value: 'One' }, { key: 'check', value: 'Constitution saving throw after damage' }] }],
+] as const;
+
+export interface BuiltInRuleContent {
+  shortDescription: string;
+  fullDescription: string;
+  searchText: string;
+  sourceReference: string;
+  typedContent: RulesPackTypedContent;
+}
 
 export function builtInRuleDefinitions(): BuiltInRuleDefinition[] {
   return listBuiltInRulesets().flatMap((ruleset) => ruleset.versions.flatMap((version) => (
-    commonEntries.map(([definitionType, slug, name, aliases = []]) => ({
+    commonEntries.filter(([, , , , versions]) => !versions || versions.includes(version.id))
+      .map(([definitionType, slug, name, aliases = []]) => ({
       id: `def_${ruleset.id}_${version.id}_${definitionType.toLocaleLowerCase('en-US')}_${slug.replaceAll('-', '_')}`,
       definitionType,
       rulesetId: ruleset.id,
@@ -142,6 +245,21 @@ export function builtInRuleDefinitions(): BuiltInRuleDefinition[] {
       locale: 'en',
     }))
   )));
+}
+
+export function builtInRuleContent(
+  rulesetVersion: string,
+  definitionType: DefinitionType,
+  slug: string,
+): BuiltInRuleContent | undefined {
+  const entry = contentEntries.find((candidate) => (
+    candidate[0] === rulesetVersion && candidate[1] === definitionType && candidate[2] === slug
+  ));
+  if (!entry) return undefined;
+  return {
+    shortDescription: entry[3], fullDescription: entry[4], searchText: entry[5],
+    sourceReference: entry[6], typedContent: structuredClone(entry[7]),
+  };
 }
 
 export function seedBuiltInRuleDefinitions(database: DatabaseSync): void {
@@ -182,14 +300,24 @@ export function builtInRuleRelations(): RuleDefinitionRelation[] {
     ['Subclass', 'life-domain', 'Class', 'cleric', 'belongsToClass'],
     ['Subclass', 'school-of-evocation', 'Class', 'wizard', 'belongsToClass'],
     ['Subclass', 'oath-of-devotion', 'Class', 'paladin', 'belongsToClass'],
+    ['Weapon', 'longsword', 'WeaponCategory', 'martial-melee', 'belongsToCategory'],
+    ['Weapon', 'longsword', 'Property', 'versatile', 'hasProperty'],
   ] as const;
-  return listBuiltInRulesets().flatMap((ruleset) => ruleset.versions.flatMap((version) => pairs.map(([
+  const shared = listBuiltInRulesets().flatMap((ruleset) => ruleset.versions.flatMap((version) => pairs.map(([
     sourceType, sourceSlug, targetType, targetSlug, relationType,
   ]) => ({
     sourceDefinitionId: definitionId(ruleset.id, version.id, sourceType, sourceSlug),
     targetDefinitionId: definitionId(ruleset.id, version.id, targetType, targetSlug),
     relationType,
   }))));
+  const versioned = listBuiltInRulesets().flatMap((ruleset) => ruleset.versions
+    .filter((version) => version.id === '2024')
+    .map((version) => ({
+      sourceDefinitionId: definitionId(ruleset.id, version.id, 'Weapon', 'longsword'),
+      targetDefinitionId: definitionId(ruleset.id, version.id, 'Mastery', 'sap'),
+      relationType: 'hasMastery' as const,
+    })));
+  return [...shared, ...versioned];
 }
 
 export function seedBuiltInRuleRelations(database: DatabaseSync): void {

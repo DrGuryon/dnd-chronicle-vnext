@@ -12,11 +12,11 @@ Balíky obsahují otevřená data pro druhy/rasy, rody, povolání, základ podt
 
 Seed používá `INSERT OR IGNORE`, takže opakované otevření databáze nevytváří duplicity. Databázové triggery blokují úpravu a smazání vestavěných definic. Homebrew definice jsou naproti tomu svázané s kampaní, vzniknou jen výslovnou uživatelskou volbou a jejich název, popis i aliasy lze upravit z Entity Card. Taková úprava prochází stejnou validací a administrativním auditem jako editace postavy.
 
-`RulesCatalogService.search` podporuje ruleset, verzi, kategorii, text, zdroj obsahu a omezený počet výsledků. Stejný dotaz používají editory i read-only AI nástroj `chronicle.search_rule_definitions`.
+`RulesCatalogService.search` dál obsluhuje kampaňové editory a striktně izolované Homebrew. Globální vestavěné definice čte `DndpediaService`: stránkuje dotaz přímo v databázi, používá FTS5, skládá dynamické facety a poskytuje jeden typovaný detail pro D&Dpedii, Entity Cards i read-only AI nástroje.
 
-## Rules Packs 2.0
+## Rules Packs 3.0
 
-`rule_definition_relations` propojuje definice typy `belongsToSpecies`, `belongsToRace`, `belongsToClass`, `requiresDefinition`, `compatibleWith` a `incompatibleWith`. Editor filtruje rod podle druhu a backend stejný vztah znovu ověří. Homebrew rod nebo podtřída ukládá explicitní parent relation.
+`rule_definition_relations` propojuje definice typy `belongsToSpecies`, `belongsToRace`, `belongsToClass`, `availableToClass`, `grantsDefinition`, `hasProperty`, `hasMastery`, `belongsToCategory`, `usesDefinition`, `requiresDefinition`, `compatibleWith` a `incompatibleWith`. Editor filtruje rod podle druhu a backend stejný vztah znovu ověří. Homebrew rod nebo podtřída ukládá explicitní parent relation.
 
 Normalizovaný katalog v `src/rules/builtin-catalog.ts` generuje příkaz `npm run generate:rules-packs` do verzovaných JSON souborů v `rules-packs/`. `npm run check:rules-packs` v CI ověřuje, že vygenerované soubory odpovídají zdroji, ID jsou unikátní a vztahy nemají osiřelé reference.
 

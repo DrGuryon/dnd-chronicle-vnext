@@ -17,6 +17,17 @@ export type DefinitionType =
   | 'Skill'
   | 'DamageType'
   | 'Deity'
+  | 'Weapon'
+  | 'Armor'
+  | 'Equipment'
+  | 'Tool'
+  | 'Vehicle'
+  | 'CreatureDefinition'
+  | 'Rule'
+  | 'Action'
+  | 'Property'
+  | 'Mastery'
+  | 'WeaponCategory'
   | 'Custom';
 
 export type AbilityId =

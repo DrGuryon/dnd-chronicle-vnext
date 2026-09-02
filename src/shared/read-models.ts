@@ -42,6 +42,16 @@ export type EntityCardKind =
   | 'Proficiency'
   | 'DamageType'
   | 'Deity'
+  | 'Weapon'
+  | 'Armor'
+  | 'Equipment'
+  | 'Tool'
+  | 'Vehicle'
+  | 'CreatureDefinition'
+  | 'Rule'
+  | 'Property'
+  | 'Mastery'
+  | 'WeaponCategory'
   | 'Custom'
   | 'Item'
   | 'Location'
@@ -269,6 +279,7 @@ export interface DefinitionCardView extends EntityCardBase {
   characterState: Readonly<Record<string, unknown>> | null;
   linkedResources: CockpitResourceView[];
   linkedActions: CockpitActionView[];
+  dndpedia?: import('./dndpedia').DndpediaEntryDetail | null;
 }
 
 export interface FeatureCardView extends EntityCardBase {

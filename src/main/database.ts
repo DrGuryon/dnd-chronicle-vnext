@@ -25,6 +25,7 @@ import { CharacterEditorService } from './editable/character-editor-service';
 import { AiDataChangeProposalService } from './ai/data-change-proposal-service';
 import { AppLogService } from './app-log/service';
 import { RulesPackService } from './rules/pack-service';
+import { DndpediaService } from './rules/dndpedia-service';
 
 interface VersionRow {
   user_version: number;
@@ -50,6 +51,7 @@ export class ChronicleDatabase {
   readonly aiRuns: AiTurnRunStore;
   readonly rulesets: RulesetRegistry;
   readonly rulesCatalog: RulesCatalogService;
+  readonly dndpedia: DndpediaService;
   readonly dataChanges: DataChangeService;
   readonly characterEditor: CharacterEditorService;
   readonly aiDataChangeProposals: AiDataChangeProposalService;
@@ -64,6 +66,7 @@ export class ChronicleDatabase {
     const repository = new SqliteChronicleRepository(database);
     this.rulesets = new RulesetRegistry();
     this.rulesCatalog = new RulesCatalogService(database, this.rulesets);
+    this.dndpedia = new DndpediaService(database, this.rulesets);
     this.appLog = new AppLogService(database);
     this.rulesPacks = new RulesPackService(database, userDataDirectory, this.appLog);
     this.dataChanges = new DataChangeService(database);
@@ -82,7 +85,9 @@ export class ChronicleDatabase {
     );
     this.relationships = new ActorRelationshipService(database);
     this.aiSettings = new CampaignAiSettingsService(database);
-    this.engine = new ChronicleEngineService(database, this.domain, this.characters, this.relationships);
+    this.engine = new ChronicleEngineService(
+      database, this.domain, this.characters, this.relationships, this.dndpedia,
+    );
     this.turnTransactions = new TurnTransactionService(database, this.domain, this.characters);
     this.aiProposals = new AiProposalService(database, this.turnTransactions);
     this.aiRuns = new AiTurnRunStore(database);
@@ -190,6 +195,11 @@ function applyMigrations(database: DatabaseSync, pending: typeof migrations): vo
       migration.up(database);
       record.run(migration.version, migration.name, new Date().toISOString());
       database.exec(`PRAGMA user_version = ${migration.version};`);
+    }
+
+    const foreignKeyIssues = database.prepare('PRAGMA foreign_key_check').all();
+    if (foreignKeyIssues.length > 0) {
+      throw new Error(`Migrace porušila referenční integritu (${foreignKeyIssues.length} chyb).`);
     }
 
     database.exec('COMMIT;');

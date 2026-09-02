@@ -156,6 +156,8 @@ export interface ChronicleApi {
   renameConversation(command: RenameConversationCommand): Promise<Conversation>;
   getConversationMessages(conversationId: string): Promise<ConversationMessage[]>;
   getCampaignLibrary(campaignId: string): Promise<CampaignLibraryView>;
+  searchDndpedia(query?: DndpediaSearchRequest): Promise<DndpediaSearchResult>;
+  getDndpediaEntry(request: DndpediaEntryRequest): Promise<DndpediaEntryDetail>;
   listRulesets(): Promise<RulesetDescriptor[]>;
   searchRuleDefinitions(query: RuleCatalogQuery): Promise<RuleCatalogResult>;
   getCharacterEditor(characterId: string): Promise<CharacterEditorView | null>;
@@ -232,3 +234,9 @@ import type {
 } from './editable-domain';
 import type { AppLogExportFormat, AppLogPage, AppLogQuery } from './app-log';
 import type { RulesPackStatus, RulesPackUpdateResult } from './rules-packs';
+import type {
+  DndpediaEntryDetail,
+  DndpediaEntryRequest,
+  DndpediaSearchRequest,
+  DndpediaSearchResult,
+} from './dndpedia';

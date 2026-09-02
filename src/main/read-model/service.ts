@@ -783,7 +783,8 @@ function cardKind(value: string): EntityCardKind {
   const supported = new Set<string>([
     'Spell', 'Feature', 'Feat', 'Class', 'Subclass', 'Species', 'Race', 'Lineage',
     'Subrace', 'Background', 'Condition', 'Language', 'Skill', 'Proficiency',
-    'DamageType', 'Deity', 'Custom',
+    'DamageType', 'Deity', 'Weapon', 'Armor', 'Equipment', 'Tool', 'Vehicle',
+    'CreatureDefinition', 'Rule', 'Property', 'Mastery', 'WeaponCategory', 'Custom',
   ]);
   return supported.has(value) ? value as EntityCardKind : 'Custom';
 }

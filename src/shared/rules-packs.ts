@@ -7,6 +7,12 @@ export const ruleDefinitionRelationTypes = [
   'requiresDefinition',
   'compatibleWith',
   'incompatibleWith',
+  'availableToClass',
+  'grantsDefinition',
+  'hasProperty',
+  'hasMastery',
+  'belongsToCategory',
+  'usesDefinition',
 ] as const;
 
 export type RuleDefinitionRelationType = (typeof ruleDefinitionRelationTypes)[number];
@@ -19,7 +25,7 @@ export interface RuleDefinitionRelation {
 }
 
 export interface RulesPackManifest {
-  schemaVersion: 1;
+  schemaVersion: 1 | 3;
   packId: string;
   version: string;
   rulesetId: string;
@@ -34,9 +40,79 @@ export interface RulesPackManifest {
 }
 
 export interface RulesPackPayload {
-  definitions: readonly RulesPackDefinition[];
-  relations: readonly RuleDefinitionRelation[];
+  definitions: RulesPackDefinition[];
+  relations: RuleDefinitionRelation[];
 }
+
+export interface RulesPackContentSection {
+  id: string;
+  title: string;
+  paragraphs: string[];
+}
+
+interface RulesPackContentBase {
+  sections?: RulesPackContentSection[];
+}
+
+export type RulesPackTypedContent =
+  | (RulesPackContentBase & {
+    kind: 'Spell';
+    level: number;
+    school: string;
+    castingTime: string;
+    range: string;
+    components: string[];
+    duration: string;
+    concentration: boolean;
+    ritual?: boolean;
+    savingThrow?: string | null;
+    attackType?: string | null;
+    damageOrHealing?: string | null;
+  })
+  | (RulesPackContentBase & {
+    kind: 'Weapon';
+    category: string;
+    damage: string;
+    damageType: string;
+    properties: string[];
+    mastery?: string | null;
+    cost?: string | null;
+    weight?: string | null;
+  })
+  | (RulesPackContentBase & {
+    kind: 'Armor';
+    category: string;
+    armorClass: string;
+    strength?: string | null;
+    stealth: string;
+    cost?: string | null;
+    weight?: string | null;
+    don?: string | null;
+    doff?: string | null;
+  })
+  | (RulesPackContentBase & {
+    kind: 'Species' | 'Race';
+    size: string;
+    speed: string;
+    creatureType?: string | null;
+    senses?: string[];
+    defenses?: string[];
+    languages?: string[];
+  })
+  | (RulesPackContentBase & {
+    kind: 'Class';
+    hitDie: string;
+    primaryAbilities: string[];
+    savingThrows: string[];
+    armorTraining: string[];
+    weaponProficiencies: string[];
+    spellcasting?: string | null;
+  })
+  | (RulesPackContentBase & {
+    kind: 'Generic';
+    definitionType: DefinitionType;
+    facts: Array<{ key: string; value: string }>;
+  });
 
 export interface RulesPackDefinition {
   id: string;
@@ -45,11 +121,18 @@ export interface RulesPackDefinition {
   rulesetVersion: string;
   canonicalId: string;
   name: string;
-  aliases: readonly string[];
+  aliases: string[];
   source: string;
   packId: string;
   packVersion: string;
   locale: string;
+  shortDescription?: string;
+  completeness?: 'full' | 'partial';
+  contentSchemaVersion?: 1;
+  fullDescription?: string;
+  typedContent?: RulesPackTypedContent;
+  searchText?: string;
+  sourceReference?: string;
 }
 
 export interface RulesPack {
@@ -60,6 +143,7 @@ export interface RulesPack {
 export interface RulesPackStatus {
   packId: string;
   version: string;
+  schemaVersion: 1 | 3;
   displayName: string;
   rulesetVersion: string;
   license: string;

@@ -31,7 +31,7 @@ export interface RuntimeWorkspaceView {
   campaigns: RuntimeWorkspaceCampaign[];
 }
 
-export type LibraryCategoryId = 'characters' | 'creatures' | 'items' | 'locations' | 'definitions';
+export type LibraryCategoryId = 'characters' | 'creatures' | 'items' | 'locations' | 'homebrew';
 
 export interface LibraryCategoryView {
   id: LibraryCategoryId;

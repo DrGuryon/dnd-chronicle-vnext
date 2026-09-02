@@ -118,7 +118,7 @@ describe('Milestone 7 first-run workspace', () => {
     raw.close();
 
     const reopened = await ChronicleDatabase.open(opened.directory);
-    expect(reopened.info.schemaVersion).toBe(8);
+    expect(reopened.info.schemaVersion).toBe(9);
     expect(reopened.aiSettings.get(campaign.id).reasoningEffort).toBe('low');
     reopened.close();
   });

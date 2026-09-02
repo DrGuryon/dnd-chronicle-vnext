@@ -116,6 +116,7 @@ function renderCard(card: EntityCardView): string {
           `).join('')}
         </dl>
       ` : ''}
+      ${renderDndpediaContent(card)}
       ${renderCharacterState(card)}
       ${renderLinkedState(card)}
       ${renderRelationships(card)}
@@ -142,6 +143,10 @@ function cardActions(card: EntityCardView): string {
 function cardFacts(card: EntityCardView): Array<[string, string]> {
   switch (card.cardType) {
     case 'definition':
+      if (card.dndpedia) return [
+        ['Canonical ID', card.dndpedia.canonicalId],
+        ...card.dndpedia.content.facts.map((item) => [item.label, item.value] as [string, string]),
+      ];
       return [
         ['Zdroj', card.source],
         ['Původ', card.origin],
@@ -219,6 +224,20 @@ function renderLinkedState(card: EntityCardView): string {
   `;
 }
 
+function renderDndpediaContent(card: EntityCardView): string {
+  if (card.cardType !== 'definition' || !card.dndpedia) return '';
+  const detail = card.dndpedia;
+  return `
+    ${detail.fullDescription ? `<section class="card-related"><h3>Úplný popis</h3><p>${escapeHtml(detail.fullDescription)}</p></section>` : ''}
+    ${detail.content.sections.map((section) => `<section class="card-related"><h3>${escapeHtml(section.title)}</h3>
+      ${section.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}</section>`).join('')}
+    <section class="card-related card-source-block"><h3>Zdroj</h3>
+      <p>${escapeHtml(detail.source.packDisplayName)} · pack ${escapeHtml(detail.source.packVersion)}</p>
+      <small>${escapeHtml(detail.source.locale)} · ${escapeHtml(detail.source.license)}</small>
+    </section>
+  `;
+}
+
 function renderRelationships(card: EntityCardView): string {
   if (card.cardType !== 'character' && card.cardType !== 'creature') return '';
   if (!card.relationships.length) return '';
@@ -249,6 +268,14 @@ function renderRelationships(card: EntityCardView): string {
 
 function collectReferences(card: EntityCardView): EntitySummary[] {
   const values = [...card.references];
+  if (card.cardType === 'definition' && card.dndpedia) {
+    values.push(...card.dndpedia.relatedDefinitions.map((reference) => ({
+      id: reference.definitionId,
+      kind: reference.definitionType as EntitySummary['kind'],
+      label: reference.name,
+      subtitle: reference.relationDisplayName,
+    })));
+  }
   if (card.cardType === 'item' && card.effectiveLocation) values.push(card.effectiveLocation);
   if (card.cardType === 'location') values.push(...card.children);
   if (card.cardType === 'event' && card.location) values.push(card.location);

@@ -43,6 +43,11 @@ import type {
 import type { RulesetDescriptor } from '../../rules/registry';
 import type { AppLogPage, AppLogQuery } from '../../shared/app-log';
 import type { RulesPackStatus, RulesPackUpdateResult } from '../../shared/rules-packs';
+import type {
+  DndpediaEntryDetail,
+  DndpediaSearchRequest,
+  DndpediaSearchResult,
+} from '../../shared/dndpedia';
 
 export class ChronicleIpcService {
   constructor(private readonly database: ChronicleDatabase) {}
@@ -173,7 +178,14 @@ export class ChronicleIpcService {
   }
 
   getEntityCard(value: unknown): EntityCardView {
-    return this.database.readModels.getEntityCard(entityCardRequest(value));
+    const request = entityCardRequest(value);
+    const card = this.database.readModels.getEntityCard(request);
+    if (card.cardType !== 'definition' || card.homebrew) return card;
+    try {
+      return { ...card, dndpedia: this.database.dndpedia.get(card.id) };
+    } catch {
+      return { ...card, dndpedia: null };
+    }
   }
 
   changeHitPoints(value: unknown): CharacterCockpitView {
@@ -414,6 +426,49 @@ export class ChronicleIpcService {
 
   getCampaignLibrary(value: unknown): CampaignLibraryView {
     return this.database.engine.getCampaignLibrary(domainId(value, 'campaign'));
+  }
+
+  searchDndpedia(value?: unknown): DndpediaSearchResult {
+    const input = value === undefined || value === null ? {} : object(value, 'D&Dpedie query');
+    const request: DndpediaSearchRequest = {
+      query: typeof input.query === 'string' ? input.query : null,
+      definitionType: typeof input.definitionType === 'string' ? input.definitionType : null,
+      definitionTypes: Array.isArray(input.definitionTypes)
+        ? input.definitionTypes.filter((item): item is string => typeof item === 'string')
+        : null,
+      rulesetId: typeof input.rulesetId === 'string' ? input.rulesetId : null,
+      rulesetVersion: typeof input.rulesetVersion === 'string' ? input.rulesetVersion : null,
+      sourcePackId: typeof input.sourcePackId === 'string' ? input.sourcePackId : null,
+      sort: typeof input.sort === 'string' ? input.sort as DndpediaSearchRequest['sort'] : undefined,
+      page: typeof input.page === 'number' ? input.page : undefined,
+      pageSize: typeof input.pageSize === 'number' ? input.pageSize : undefined,
+    };
+    try {
+      return this.database.dndpedia.search(request);
+    } catch (error) {
+      this.database.appLog.write({
+        severity: 'error', category: 'data', event: 'dndpedia.search-failed',
+        message: 'Načtení katalogu D&Dpedie selhalo.',
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
+      throw new Error('D&Dpedii se nepodařilo načíst. Zkuste to znovu.');
+    }
+  }
+
+  getDndpediaEntry(value: unknown): DndpediaEntryDetail {
+    const input = object(value, 'D&Dpedie detail request');
+    const id = textValue(input.id, 'ID definice');
+    if (id.length > 300) throw new Error('ID definice je příliš dlouhé.');
+    try {
+      return this.database.dndpedia.get(id, typeof input.locale === 'string' ? input.locale : null);
+    } catch (error) {
+      this.database.appLog.write({
+        severity: 'error', category: 'data', event: 'dndpedia.detail-failed',
+        message: 'Načtení detailu D&Dpedie selhalo.',
+        details: { id, error: error instanceof Error ? error.message : String(error) },
+      });
+      throw error;
+    }
   }
 
   listRulesets(): RulesetDescriptor[] {

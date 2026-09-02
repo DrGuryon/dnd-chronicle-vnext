@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { seedBuiltInRuleDefinitions, seedBuiltInRuleRelations } from '../rules/builtin-catalog';
+import { rebuildDndpediaSearchIndex } from './rules/dndpedia-index';
 
 export interface Migration {
   version: number;
@@ -1094,6 +1095,95 @@ export const migrations: readonly Migration[] = [
       // key-backed relations; INSERT OR IGNORE preserves every existing row.
       seedBuiltInRuleDefinitions(database);
       seedBuiltInRuleRelations(database);
+    },
+  },
+  {
+    version: 9,
+    name: 'create_dndpedia_catalog_documents_and_search',
+    up(database) {
+      database.exec(`
+        DROP INDEX rule_definition_relations_target_idx;
+        ALTER TABLE rule_definition_relations RENAME TO rule_definition_relations_v8;
+        CREATE TABLE rule_definition_relations (
+          source_definition_id TEXT NOT NULL REFERENCES rule_definitions(id) ON DELETE CASCADE,
+          target_definition_id TEXT NOT NULL REFERENCES rule_definitions(id) ON DELETE CASCADE,
+          relation_type TEXT NOT NULL CHECK (relation_type IN (
+            'belongsToSpecies', 'belongsToRace', 'belongsToClass',
+            'requiresDefinition', 'compatibleWith', 'incompatibleWith',
+            'availableToClass', 'grantsDefinition', 'hasProperty', 'hasMastery',
+            'belongsToCategory', 'usesDefinition'
+          )),
+          metadata TEXT,
+          PRIMARY KEY (source_definition_id, target_definition_id, relation_type),
+          CHECK (source_definition_id <> target_definition_id)
+        ) STRICT;
+        INSERT INTO rule_definition_relations
+          SELECT source_definition_id, target_definition_id, relation_type, metadata
+          FROM rule_definition_relations_v8;
+        DROP TABLE rule_definition_relations_v8;
+        CREATE INDEX rule_definition_relations_target_idx
+          ON rule_definition_relations(target_definition_id, relation_type);
+
+        DROP INDEX rules_pack_installations_active_ruleset_idx;
+        ALTER TABLE rules_pack_installations RENAME TO rules_pack_installations_v8;
+        CREATE TABLE rules_pack_installations (
+          pack_id TEXT NOT NULL,
+          version TEXT NOT NULL,
+          schema_version INTEGER NOT NULL CHECK (schema_version IN (1, 3)),
+          ruleset_id TEXT NOT NULL,
+          ruleset_version TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          license TEXT NOT NULL,
+          attribution TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          source_url TEXT NOT NULL,
+          update_url TEXT NOT NULL,
+          published_at TEXT NOT NULL,
+          installed_at TEXT NOT NULL,
+          activated_at TEXT,
+          active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
+          previous_version TEXT,
+          PRIMARY KEY (pack_id, version)
+        ) STRICT;
+        INSERT INTO rules_pack_installations
+          SELECT pack_id, version, schema_version, ruleset_id, ruleset_version,
+                 display_name, license, attribution, content_hash, source_url,
+                 update_url, published_at, installed_at, activated_at, active,
+                 previous_version
+          FROM rules_pack_installations_v8;
+        DROP TABLE rules_pack_installations_v8;
+        CREATE UNIQUE INDEX rules_pack_installations_active_ruleset_idx
+          ON rules_pack_installations(ruleset_id, ruleset_version) WHERE active = 1;
+
+        CREATE TABLE rule_definition_documents (
+          definition_id TEXT NOT NULL REFERENCES rule_definitions(id) ON DELETE CASCADE,
+          content_schema_version INTEGER NOT NULL CHECK (content_schema_version >= 1),
+          locale TEXT NOT NULL CHECK (length(trim(locale)) > 0),
+          completeness TEXT NOT NULL CHECK (completeness IN ('full', 'partial')),
+          full_description TEXT NOT NULL DEFAULT '',
+          content_json TEXT,
+          search_text TEXT NOT NULL DEFAULT '',
+          content_hash TEXT NOT NULL,
+          source_reference TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (definition_id, locale)
+        ) STRICT;
+        CREATE INDEX rule_definition_documents_locale_idx
+          ON rule_definition_documents(locale, completeness, definition_id);
+
+        CREATE VIRTUAL TABLE dndpedia_fts USING fts5(
+          definition_id UNINDEXED,
+          canonical_id,
+          name,
+          aliases,
+          short_description,
+          full_description,
+          search_text,
+          tokenize = 'unicode61 remove_diacritics 2'
+        );
+      `);
+      rebuildDndpediaSearchIndex(database);
     },
   },
 ];

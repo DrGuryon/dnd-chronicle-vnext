@@ -179,6 +179,8 @@ function registerIpc(): void {
   handle('conversation:rename', (command) => chronicle.renameConversation(command));
   handle('conversation:list-messages', (conversationId) => chronicle.listConversationMessages(conversationId));
   handle('library:get-campaign', (campaignId) => chronicle.getCampaignLibrary(campaignId));
+  handle('dndpedia:search', (query) => chronicle.searchDndpedia(query));
+  handle('dndpedia:get-entry', (request) => chronicle.getDndpediaEntry(request));
   handle('rules:list-rulesets', () => chronicle.listRulesets());
   handle('rules:search-definitions', (query) => chronicle.searchRuleDefinitions(query));
   handle('character:get-editor', (characterId) => chronicle.getCharacterEditor(characterId));

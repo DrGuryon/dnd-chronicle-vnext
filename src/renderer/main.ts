@@ -17,6 +17,7 @@ import { renderLibrary } from './views/library';
 import { renderOverview, updateHeading } from './views/overview';
 import { renderPlayChrome } from './views/play';
 import { ToastService } from './toast-service';
+import { DndpediaController } from './dndpedia-controller';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 if (!appRoot) throw new Error('Kořen aplikace nebyl nalezen.');
@@ -26,7 +27,7 @@ appRoot.innerHTML = `<div class="app-shell" data-app-shell>
     <div class="sidebar-scroll"><div class="brand-mark" aria-hidden="true">D20</div>
       <div class="brand-copy"><span>D&amp;D</span><strong>Chronicle</strong></div>
       <nav>${navButton('overview', '⌂', 'Přehled')}${navButton('campaigns', '◇', 'Kampaně')}
-        ${navButton('play', '▶', 'Hrát')}${navButton('library', '⌁', 'Knihovna')}${navButton('log', '≡', 'Log')}${navButton('settings', '⚙', 'Nastavení')}</nav>
+        ${navButton('play', '▶', 'Hrát')}${navButton('library', '⌁', 'Knihovna')}${navButton('dndpedia', '✦', 'D&Dpedie')}${navButton('log', '≡', 'Log')}${navButton('settings', '⚙', 'Nastavení')}</nav>
     </div>
     <div class="sidebar-foot"><span class="status-dot"></span><span>Lokální režim</span></div>
   </aside>
@@ -37,6 +38,7 @@ appRoot.innerHTML = `<div class="app-shell" data-app-shell>
       <div data-play-chrome></div><section class="ai-chat" data-ai-chat aria-label="Chronicle Chat"></section>
     </section>
     <section class="app-view" data-view-panel="library" hidden></section>
+    <section class="app-view" data-view-panel="dndpedia" hidden></section>
     <section class="app-view" data-view-panel="log" hidden></section>
     <section class="app-view" data-view-panel="settings" hidden></section>
   </main>
@@ -47,6 +49,7 @@ appRoot.innerHTML = `<div class="app-shell" data-app-shell>
   </aside>
   <button type="button" class="cockpit-restore" data-action="show-cockpit" aria-label="Zobrazit Character Cockpit">◫ Postava</button>
   <dialog class="entity-card-dialog" data-entity-card-dialog aria-label="Detail entity"></dialog>
+  <dialog class="dndpedia-dialog" data-dndpedia-dialog aria-label="Detail pravidla z D&Dpedie"></dialog>
   <dialog class="form-dialog" data-form-dialog aria-label="Formulář"></dialog>
   <div class="toast-host" data-toast-host aria-label="Oznámení"></div>
 </div>`;
@@ -56,6 +59,7 @@ const overviewRoot = requireElement<HTMLElement>('[data-view-panel="overview"]')
 const campaignsRoot = requireElement<HTMLElement>('[data-view-panel="campaigns"]');
 const playChromeRoot = requireElement<HTMLElement>('[data-play-chrome]');
 const libraryRoot = requireElement<HTMLElement>('[data-view-panel="library"]');
+const dndpediaRoot = requireElement<HTMLElement>('[data-view-panel="dndpedia"]');
 const logRoot = requireElement<HTMLElement>('[data-view-panel="log"]');
 const settingsRoot = requireElement<HTMLElement>('[data-view-panel="settings"]');
 const cockpitPanel = requireElement<HTMLElement>('[data-cockpit-panel]');
@@ -94,6 +98,14 @@ const aiChat = new AiChatController(requireElement<HTMLElement>('[data-ai-chat]'
   notify: (message, type) => toasts.show(message, type),
 });
 const settings = new AiSettingsController(settingsRoot, (message, type) => toasts.show(message, type));
+const dndpedia = new DndpediaController(
+  dndpediaRoot,
+  requireElement<HTMLDialogElement>('[data-dndpedia-dialog]'),
+  {
+    openRulesPackSettings: () => void navigate('settings'),
+    notify: (message, type) => toasts.show(message, type),
+  },
+);
 new EntityCardHost(requireElement<HTMLDialogElement>('[data-entity-card-dialog]'), {
   editCharacter: (characterId) => void editCharacterById(characterId),
   editHomebrewDefinition: (definition) => void editHomebrewDefinition(definition),
@@ -137,6 +149,7 @@ async function renderAll(): Promise<void> {
   await aiChat.load(campaign);
   await cockpit.load(campaign?.runtime.activePlayerCharacterId ?? undefined);
   if (activeView === 'library') await loadLibrary();
+  if (activeView === 'dndpedia') await dndpedia.load();
   if (activeView === 'log') await appLog.load(campaigns);
   else renderLibrary(libraryRoot, campaigns, campaign, library, libraryQuery);
   if (activeView === 'settings') await settings.load(campaigns, activeCampaignId, info, updateState);
@@ -156,6 +169,7 @@ async function navigate(view: AppView): Promise<void> {
   if (view === 'play' && !activeCampaignId && campaigns.length) activeCampaignId = campaigns[0].id;
   renderNavigation();
   if (view === 'library') await loadLibrary();
+  if (view === 'dndpedia') await dndpedia.load();
   if (view === 'log') await appLog.load(campaigns);
   if (view === 'settings') await settings.load(campaigns, activeCampaignId, info, updateState);
   updateCockpitVisibility();
