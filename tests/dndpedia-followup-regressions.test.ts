@@ -595,7 +595,9 @@ describe('D&Dpedie follow-up renderer contract', () => {
     expect(controller).toContain('ensureShell()');
     expect(controller).toContain('renderCatalogChrome()');
     expect(controller).toContain('renderResultsRegion()');
-    const searchBody = controller.match(/private async search\([^)]*\): Promise<void> \{([\s\S]*?)\n  \}\n\n  private /)?.[1] ?? '';
+    const searchBody = controller.match(
+      /private async search\([^)]*\): Promise<void> \{([\s\S]*?)\r?\n  \}\r?\n\r?\n  private /,
+    )?.[1] ?? '';
     expect(searchBody).not.toContain('this.render()');
     expect(searchBody).toContain('this.renderResultsRegion()');
 
