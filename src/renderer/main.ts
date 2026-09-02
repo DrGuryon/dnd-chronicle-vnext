@@ -18,18 +18,18 @@ import { renderOverview, updateHeading } from './views/overview';
 import { renderPlayChrome } from './views/play';
 import { ToastService } from './toast-service';
 import { DndpediaController } from './dndpedia-controller';
+import { setApplicationLocale, t } from './i18n';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 if (!appRoot) throw new Error('Kořen aplikace nebyl nalezen.');
 
 appRoot.innerHTML = `<div class="app-shell" data-app-shell>
-  <aside class="sidebar" aria-label="Hlavní navigace">
+  <aside class="sidebar" aria-label="${t('shell.mainNavigation')}">
     <div class="sidebar-scroll"><div class="brand-mark" aria-hidden="true">D20</div>
       <div class="brand-copy"><span>D&amp;D</span><strong>Chronicle</strong></div>
-      <nav>${navButton('overview', '⌂', 'Přehled')}${navButton('campaigns', '◇', 'Kampaně')}
-        ${navButton('play', '▶', 'Hrát')}${navButton('library', '⌁', 'Knihovna')}${navButton('dndpedia', '✦', 'D&Dpedie')}${navButton('log', '≡', 'Log')}${navButton('settings', '⚙', 'Nastavení')}</nav>
+      <nav data-main-nav>${renderNavButtons()}</nav>
     </div>
-    <div class="sidebar-foot"><span class="status-dot"></span><span>Lokální režim</span></div>
+    <div class="sidebar-foot"><span class="status-dot"></span><span data-local-mode>${t('shell.localMode')}</span></div>
   </aside>
   <main class="workspace-main">
     <section class="app-view" data-view-panel="overview"></section>
@@ -42,16 +42,16 @@ appRoot.innerHTML = `<div class="app-shell" data-app-shell>
     <section class="app-view" data-view-panel="log" hidden></section>
     <section class="app-view" data-view-panel="settings" hidden></section>
   </main>
-  <aside class="cockpit-panel" data-cockpit-panel aria-label="Character Cockpit">
-    <div class="cockpit-resizer" data-cockpit-resizer role="separator" aria-label="Změnit šířku Character Cockpitu" aria-orientation="vertical" tabindex="0"></div>
-    <button type="button" class="cockpit-hide" data-action="hide-cockpit" aria-label="Skrýt Character Cockpit">×</button>
+  <aside class="cockpit-panel" data-cockpit-panel aria-label="${t('shell.characterPanel')}">
+    <div class="cockpit-resizer" data-cockpit-resizer role="separator" aria-label="${t('shell.resizeCharacter')}" aria-orientation="vertical" tabindex="0"></div>
+    <button type="button" class="cockpit-hide" data-action="hide-cockpit" aria-label="${t('shell.hideCharacter')}">×</button>
     <div class="cockpit-content" data-cockpit></div>
   </aside>
-  <button type="button" class="cockpit-restore" data-action="show-cockpit" aria-label="Zobrazit Character Cockpit">◫ Postava</button>
-  <dialog class="entity-card-dialog" data-entity-card-dialog aria-label="Detail entity"></dialog>
-  <dialog class="dndpedia-dialog" data-dndpedia-dialog aria-label="Detail pravidla z D&Dpedie"></dialog>
-  <dialog class="form-dialog" data-form-dialog aria-label="Formulář"></dialog>
-  <div class="toast-host" data-toast-host aria-label="Oznámení"></div>
+  <button type="button" class="cockpit-restore" data-action="show-cockpit" aria-label="${t('shell.showCharacter')}">◫ <span data-character-label>${t('shell.character')}</span></button>
+  <dialog class="entity-card-dialog" data-entity-card-dialog aria-label="${t('shell.entityDetail')}"></dialog>
+  <dialog class="dndpedia-dialog" data-dndpedia-dialog aria-label="${t('shell.ruleDetail')}"></dialog>
+  <dialog class="form-dialog" data-form-dialog aria-label="${t('shell.form')}"></dialog>
+  <div class="toast-host" data-toast-host aria-label="${t('shell.notifications')}"></div>
 </div>`;
 
 const shell = requireElement<HTMLElement>('[data-app-shell]');
@@ -97,7 +97,11 @@ const aiChat = new AiChatController(requireElement<HTMLElement>('[data-ai-chat]'
   createConversation: () => void createConversation(),
   notify: (message, type) => toasts.show(message, type),
 });
-const settings = new AiSettingsController(settingsRoot, (message, type) => toasts.show(message, type));
+const settings = new AiSettingsController(
+  settingsRoot,
+  (message, type) => toasts.show(message, type),
+  () => renderStaticChrome(),
+);
 const dndpedia = new DndpediaController(
   dndpediaRoot,
   requireElement<HTMLDialogElement>('[data-dndpedia-dialog]'),
@@ -125,10 +129,15 @@ void bootstrap();
 
 async function bootstrap(): Promise<void> {
   try {
-    [info, campaigns] = await Promise.all([
+    const [bootstrapInfo, campaignList, languagePreferences] = await Promise.all([
       window.chronicle.getBootstrap(),
       window.chronicle.listCampaigns(),
+      window.chronicle.getLanguagePreferences(),
     ]);
+    info = bootstrapInfo;
+    campaigns = campaignList;
+    setApplicationLocale(languagePreferences.applicationLocale);
+    renderStaticChrome();
     updateState = info.update;
     const route = resolveStartupRoute(campaigns, uiState.lastActiveCampaignId);
     activeCampaignId = route.campaignId;
@@ -186,6 +195,32 @@ function renderNavigation(): void {
     button.setAttribute('aria-current', selected ? 'page' : 'false');
     if (button.dataset.navView === 'play') button.hidden = campaigns.length === 0;
   });
+}
+
+function renderStaticChrome(): void {
+  const navigation = document.querySelector<HTMLElement>('[data-main-nav]');
+  if (navigation) navigation.innerHTML = renderNavButtons();
+  document.querySelector<HTMLElement>('.sidebar')?.setAttribute('aria-label', t('shell.mainNavigation'));
+  const localMode = document.querySelector<HTMLElement>('[data-local-mode]');
+  if (localMode) localMode.textContent = t('shell.localMode');
+  cockpitPanel.setAttribute('aria-label', t('shell.characterPanel'));
+  cockpitPanel.querySelector<HTMLElement>('[data-cockpit-resizer]')?.setAttribute('aria-label', t('shell.resizeCharacter'));
+  cockpitPanel.querySelector<HTMLElement>('[data-action="hide-cockpit"]')?.setAttribute('aria-label', t('shell.hideCharacter'));
+  cockpitRestore.setAttribute('aria-label', t('shell.showCharacter'));
+  const characterLabel = cockpitRestore.querySelector<HTMLElement>('[data-character-label]');
+  if (characterLabel) characterLabel.textContent = t('shell.character');
+  document.querySelector<HTMLElement>('[data-entity-card-dialog]')?.setAttribute('aria-label', t('shell.entityDetail'));
+  document.querySelector<HTMLElement>('[data-dndpedia-dialog]')?.setAttribute('aria-label', t('shell.ruleDetail'));
+  document.querySelector<HTMLElement>('[data-form-dialog]')?.setAttribute('aria-label', t('shell.form'));
+  document.querySelector<HTMLElement>('[data-toast-host]')?.setAttribute('aria-label', t('shell.notifications'));
+  renderNavigation();
+}
+
+function renderNavButtons(): string {
+  return `${navButton('overview', '⌂', t('nav.overview'))}${navButton('campaigns', '◇', t('nav.campaigns'))}
+    ${navButton('play', '▶', t('nav.play'))}${navButton('library', '⌁', t('nav.library'))}
+    ${navButton('dndpedia', '✦', t('nav.dndpedia'))}${navButton('log', '≡', t('nav.log'))}
+    ${navButton('settings', '⚙', t('nav.settings'))}`;
 }
 
 async function onClick(event: MouseEvent): Promise<void> {

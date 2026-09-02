@@ -67,7 +67,15 @@ export class RulesCatalogService {
     const clauses = ['ruleset_id = ?', 'ruleset_version = ?'];
     const values: Array<string | number> = [input.rulesetId, input.rulesetVersion];
     const sourceClauses: string[] = [];
-    if (input.includeBuiltIn !== false) sourceClauses.push('is_builtin = 1');
+    if (input.includeBuiltIn !== false) sourceClauses.push(`(
+      is_builtin = 1
+      AND EXISTS (
+        SELECT 1 FROM rules_pack_installations active_pack
+        WHERE active_pack.pack_id = rule_definitions.pack_id
+          AND active_pack.version = rule_definitions.pack_version
+          AND active_pack.active = 1
+      )
+    )`);
     if (input.includeHomebrew !== false && input.campaignId) {
       sourceClauses.push('(is_homebrew = 1 AND is_builtin = 0 AND campaign_id = ?)');
       values.push(input.campaignId);

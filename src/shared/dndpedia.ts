@@ -126,6 +126,7 @@ export interface DndpediaSourceMetadata {
   attribution: string;
   sourceUrl: string;
   sourceReference: string | null;
+  adaptationAttribution: string | null;
 }
 
 export interface DndpediaEntryDetail {
@@ -139,6 +140,9 @@ export interface DndpediaEntryDetail {
   rulesetDisplayName: string;
   sourceDisplayName: string;
   locale: string;
+  requestedLocale: string;
+  availableLocales: string[];
+  usedFallback: boolean;
   completeness: 'full' | 'partial';
   content: DndpediaStructuredContent;
   relatedDefinitions: DndpediaRelatedDefinition[];

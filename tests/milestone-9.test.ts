@@ -27,19 +27,19 @@ describe('Milestone 9 rules data and diagnostics', () => {
   it('filters dependent definitions and rejects a lineage that belongs to another species', async () => {
     const { database } = await openDatabase();
     try {
-      const campaign = database.domain.createCampaign({ name: 'Vztahy', rulesetId: 'dnd5e', rulesetVersion: '2024' });
-      const dwarf = 'def_dnd5e_2024_species_dwarf';
-      const elf = 'def_dnd5e_2024_species_elf';
-      const hillDwarf = 'def_dnd5e_2024_lineage_hill_dwarf';
+      const campaign = database.domain.createCampaign({ name: 'Vztahy', rulesetId: 'dnd5e', rulesetVersion: '2014' });
+      const dwarf = 'def_dnd5e_2014_species_dwarf';
+      const elf = 'def_dnd5e_2014_species_elf';
+      const hillDwarf = 'def_dnd5e_2014_lineage_hill_dwarf';
       expect(database.rulesCatalog.search({
-        campaignId: campaign.id, rulesetId: 'dnd5e', rulesetVersion: '2024',
+        campaignId: campaign.id, rulesetId: 'dnd5e', rulesetVersion: '2014',
         definitionTypes: ['Lineage'], parentDefinitionId: dwarf, limit: 20,
       }).items.map((item) => item.id)).toEqual([hillDwarf]);
       expect(database.rulesCatalog.get(hillDwarf)?.parentDefinitionIds).toContain(dwarf);
       expect(database.rulesCatalog.search({
-        campaignId: campaign.id, rulesetId: 'dnd5e', rulesetVersion: '2024',
-        definitionTypes: ['Subclass'], parentDefinitionId: 'def_dnd5e_2024_class_paladin', limit: 20,
-      }).items.map((item) => item.id)).toEqual(['def_dnd5e_2024_subclass_oath_of_devotion']);
+        campaignId: campaign.id, rulesetId: 'dnd5e', rulesetVersion: '2014',
+        definitionTypes: ['Subclass'], parentDefinitionId: 'def_dnd5e_2014_class_paladin', limit: 20,
+      }).items.map((item) => item.id)).toEqual(['def_dnd5e_2014_subclass_oath_of_devotion']);
 
       const character = database.domain.createCharacter({
         campaignId: campaign.id, name: 'Chybná kombinace', characterType: 'PC', currentLifeStateId: LifeStateIds.alive,
@@ -85,24 +85,24 @@ describe('Milestone 9 rules data and diagnostics', () => {
   it('activates a new pack version without invalidating stable character references', async () => {
     const { database } = await openDatabase();
     try {
-      const campaign = database.domain.createCampaign({ name: 'Upgrade', rulesetId: 'dnd5e', rulesetVersion: '2024' });
+      const campaign = database.domain.createCampaign({ name: 'Upgrade', rulesetId: 'dnd5e', rulesetVersion: '2014' });
       const character = database.domain.createCharacter({
         campaignId: campaign.id, name: 'Borin', characterType: 'PC', currentLifeStateId: LifeStateIds.alive,
       });
       database.characters.setOrigin(character.id, {
-        speciesId: 'def_dnd5e_2024_species_dwarf', lineageId: 'def_dnd5e_2024_lineage_hill_dwarf', backgroundId: null,
+        speciesId: 'def_dnd5e_2014_species_dwarf', lineageId: 'def_dnd5e_2014_lineage_hill_dwarf', backgroundId: null,
       });
-      const next = structuredClone(bundledRulesPacks().find((pack) => pack.manifest.packId === 'dnd5e-srd-5.2.1')!) as RulesPack;
-      next.manifest.version = '1.1.0';
-      for (const definition of next.payload.definitions) definition.packVersion = '1.1.0';
-      next.payload.definitions.find((definition) => definition.id === 'def_dnd5e_2024_species_dwarf')!.aliases = ['Trpaslík', 'Dwarf folk'];
+      const next = structuredClone(bundledRulesPacks().find((pack) => pack.manifest.packId === 'dnd5e-srd-5.1')!) as RulesPack;
+      next.manifest.version = '3.1.0';
+      for (const definition of next.payload.definitions) definition.packVersion = '3.1.0';
+      next.payload.definitions.find((definition) => definition.id === 'def_dnd5e_2014_species_dwarf')!.aliases = ['Trpaslík', 'Dwarf folk'];
       next.manifest.contentHash = testHash(next.payload);
       const result = await database.rulesPacks.install(next);
-      expect(result.status).toMatchObject({ version: '1.1.0', active: true });
+      expect(result.status).toMatchObject({ version: '3.1.0', active: true });
       expect(database.characters.getOrigin(character.id)).toMatchObject({
-        speciesId: 'def_dnd5e_2024_species_dwarf', lineageId: 'def_dnd5e_2024_lineage_hill_dwarf',
+        speciesId: 'def_dnd5e_2014_species_dwarf', lineageId: 'def_dnd5e_2014_lineage_hill_dwarf',
       });
-      expect(database.rulesCatalog.get('def_dnd5e_2024_species_dwarf')?.aliases).toContain('Dwarf folk');
+      expect(database.rulesCatalog.get('def_dnd5e_2014_species_dwarf')?.aliases).toContain('Dwarf folk');
     } finally { database.close(); }
   });
 

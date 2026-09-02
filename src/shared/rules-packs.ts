@@ -133,6 +133,20 @@ export interface RulesPackDefinition {
   typedContent?: RulesPackTypedContent;
   searchText?: string;
   sourceReference?: string;
+  localizations?: RulesPackLocalization[];
+}
+
+export interface RulesPackLocalization {
+  locale: string;
+  name: string;
+  shortDescription: string;
+  completeness: 'full' | 'partial';
+  contentSchemaVersion: 1;
+  fullDescription: string;
+  typedContent?: RulesPackTypedContent;
+  searchText?: string;
+  sourceReference?: string;
+  adaptationAttribution: string;
 }
 
 export interface RulesPack {

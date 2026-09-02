@@ -143,6 +143,8 @@ function registerIpc(): void {
   });
   if (!chronicleDatabase) throw new Error('Databáze ještě není připravená.');
   const chronicle = new ChronicleIpcService(chronicleDatabase);
+  handle('preferences:get-languages', () => chronicle.getLanguagePreferences());
+  handle('preferences:save-languages', (preferences) => chronicle.saveLanguagePreferences(preferences));
   handle('campaign:list', () => chronicle.listCampaigns());
   handle('campaign:create', (command) => chronicle.createCampaign(command));
   handle('campaign:rename', (command) => chronicle.renameCampaign(command));

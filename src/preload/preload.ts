@@ -3,6 +3,12 @@ import type { BootstrapInfo, ChronicleApi, UpdateState } from '../shared/contrac
 
 const api: ChronicleApi = {
   getBootstrap: () => ipcRenderer.invoke('app:get-bootstrap') as Promise<BootstrapInfo>,
+  getLanguagePreferences: () => ipcRenderer.invoke(
+    'preferences:get-languages',
+  ) as ReturnType<ChronicleApi['getLanguagePreferences']>,
+  saveLanguagePreferences: (preferences) => ipcRenderer.invoke(
+    'preferences:save-languages', preferences,
+  ) as ReturnType<ChronicleApi['saveLanguagePreferences']>,
   listCampaigns: () => ipcRenderer.invoke('campaign:list') as ReturnType<ChronicleApi['listCampaigns']>,
   createCampaign: (command) => ipcRenderer.invoke(
     'campaign:create', command,

@@ -48,9 +48,26 @@ import type {
   DndpediaSearchRequest,
   DndpediaSearchResult,
 } from '../../shared/dndpedia';
+import type { LanguagePreferences, LanguagePreferencesInput } from '../../shared/languages';
 
 export class ChronicleIpcService {
   constructor(private readonly database: ChronicleDatabase) {}
+
+  getLanguagePreferences(): LanguagePreferences {
+    return this.database.languagePreferences.get();
+  }
+
+  saveLanguagePreferences(value: unknown): LanguagePreferences {
+    const input = object(value, 'Language preferences');
+    if (!Array.isArray(input.encyclopediaLocales)) {
+      throw new Error('Jazyky encyklopedie musí být pole.');
+    }
+    const preferences: LanguagePreferencesInput = {
+      applicationLocale: textValue(input.applicationLocale, 'Jazyk aplikace'),
+      encyclopediaLocales: input.encyclopediaLocales.map((locale) => textValue(locale, 'Jazyk encyklopedie')),
+    };
+    return this.database.languagePreferences.save(preferences);
+  }
 
   listCampaigns(): RuntimeWorkspaceCampaign[] {
     return this.database.engine.getRuntimeWorkspace().campaigns;

@@ -120,6 +120,8 @@ export interface UpdateHomebrewDefinitionCommand {
 
 export interface ChronicleApi {
   getBootstrap(): Promise<BootstrapInfo>;
+  getLanguagePreferences(): Promise<LanguagePreferences>;
+  saveLanguagePreferences(preferences: LanguagePreferencesInput): Promise<LanguagePreferences>;
   listCampaigns(): Promise<RuntimeWorkspaceCampaign[]>;
   createCampaign(command: CreateCampaignCommand): Promise<RuntimeWorkspaceCampaign>;
   renameCampaign(command: RenameCampaignCommand): Promise<RuntimeWorkspaceCampaign>;
@@ -234,6 +236,7 @@ import type {
 } from './editable-domain';
 import type { AppLogExportFormat, AppLogPage, AppLogQuery } from './app-log';
 import type { RulesPackStatus, RulesPackUpdateResult } from './rules-packs';
+import type { LanguagePreferences, LanguagePreferencesInput } from './languages';
 import type {
   DndpediaEntryDetail,
   DndpediaEntryRequest,

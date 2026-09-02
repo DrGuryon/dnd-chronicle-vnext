@@ -8,6 +8,7 @@ import { SqliteCharacterRepository } from './character/repository';
 import { CharacterDomainService } from './character/service';
 import { SqliteUiPreferencesRepository } from './preferences/repository';
 import { UiPreferencesService } from './preferences/service';
+import { LanguagePreferencesService } from './preferences/language-service';
 import { ChronicleReadModelService } from './read-model/service';
 import { RulesEngineRegistry } from '../rules/rules-engine';
 import type { StorageInfo } from '../shared/contracts';
@@ -41,6 +42,7 @@ export class ChronicleDatabase {
   readonly domain: ChronicleDomainService;
   readonly characters: CharacterDomainService;
   readonly preferences: UiPreferencesService;
+  readonly languagePreferences: LanguagePreferencesService;
   readonly readModels: ChronicleReadModelService;
   readonly engine: ChronicleEngineService;
   readonly turnTransactions: TurnTransactionService;
@@ -66,7 +68,12 @@ export class ChronicleDatabase {
     const repository = new SqliteChronicleRepository(database);
     this.rulesets = new RulesetRegistry();
     this.rulesCatalog = new RulesCatalogService(database, this.rulesets);
-    this.dndpedia = new DndpediaService(database, this.rulesets);
+    this.languagePreferences = new LanguagePreferencesService(database);
+    this.dndpedia = new DndpediaService(
+      database,
+      this.rulesets,
+      () => this.languagePreferences.get(),
+    );
     this.appLog = new AppLogService(database);
     this.rulesPacks = new RulesPackService(database, userDataDirectory, this.appLog);
     this.dataChanges = new DataChangeService(database);

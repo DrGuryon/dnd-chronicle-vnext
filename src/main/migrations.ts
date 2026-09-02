@@ -1165,6 +1165,9 @@ export const migrations: readonly Migration[] = [
           search_text TEXT NOT NULL DEFAULT '',
           content_hash TEXT NOT NULL,
           source_reference TEXT,
+          localized_name TEXT,
+          short_description TEXT NOT NULL DEFAULT '',
+          adaptation_attribution TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           PRIMARY KEY (definition_id, locale)
@@ -1182,6 +1185,34 @@ export const migrations: readonly Migration[] = [
           search_text,
           tokenize = 'unicode61 remove_diacritics 2'
         );
+      `);
+      rebuildDndpediaSearchIndex(database);
+    },
+  },
+  {
+    version: 10,
+    name: 'add_dndpedia_localized_documents',
+    up(database) {
+      const columns = new Set((database.prepare(`PRAGMA table_info(rule_definition_documents)`).all() as Array<{
+        name: string;
+      }>).map((column) => column.name));
+      if (!columns.has('localized_name')) {
+        database.exec(`ALTER TABLE rule_definition_documents ADD COLUMN localized_name TEXT;`);
+      }
+      if (!columns.has('short_description')) {
+        database.exec(`ALTER TABLE rule_definition_documents ADD COLUMN short_description TEXT NOT NULL DEFAULT '';`);
+      }
+      if (!columns.has('adaptation_attribution')) {
+        database.exec(`ALTER TABLE rule_definition_documents ADD COLUMN adaptation_attribution TEXT;`);
+      }
+      database.exec(`
+        UPDATE rule_definition_documents
+        SET localized_name = coalesce(localized_name, (
+              SELECT name FROM rule_definitions WHERE id = rule_definition_documents.definition_id
+            )),
+            short_description = CASE WHEN length(trim(short_description)) > 0 THEN short_description ELSE coalesce((
+              SELECT description FROM rule_definitions WHERE id = rule_definition_documents.definition_id
+            ), '') END;
       `);
       rebuildDndpediaSearchIndex(database);
     },

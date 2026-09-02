@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DefinitionType } from '../domain/character-models';
-import type { RuleDefinitionRelation, RulesPackTypedContent } from '../shared/rules-packs';
+import type { RuleDefinitionRelation, RulesPackLocalization, RulesPackTypedContent } from '../shared/rules-packs';
+import { openSrdContentEntries } from './open-srd-content.generated';
 import { listBuiltInRulesets } from './registry';
 
 export interface BuiltInRuleDefinition {
@@ -26,12 +27,12 @@ const commonEntries: readonly CatalogEntry[] = [
   ['Species', 'halfling', 'Halfling', ['Půlčík']],
   ['Species', 'dragonborn', 'Dragonborn', ['Drakorozený']],
   ['Species', 'gnome', 'Gnome', ['Gnóm']],
-  ['Species', 'half-elf', 'Half-Elf', ['Půlelf']],
-  ['Species', 'half-orc', 'Half-Orc', ['Půlork']],
+  ['Species', 'half-elf', 'Half-Elf', ['Půlelf'], ['2014']],
+  ['Species', 'half-orc', 'Half-Orc', ['Půlork'], ['2014']],
   ['Species', 'tiefling', 'Tiefling', ['Tiefling']],
-  ['Lineage', 'hill-dwarf', 'Hill Dwarf', ['Horský trpaslík']],
-  ['Lineage', 'high-elf', 'High Elf', ['Vznešený elf']],
-  ['Lineage', 'lightfoot-halfling', 'Lightfoot Halfling', ['Lehkonohý půlčík']],
+  ['Lineage', 'hill-dwarf', 'Hill Dwarf', ['Horský trpaslík'], ['2014']],
+  ['Lineage', 'high-elf', 'High Elf', ['Vznešený elf'], ['2014']],
+  ['Lineage', 'lightfoot-halfling', 'Lightfoot Halfling', ['Lehkonohý půlčík'], ['2014']],
   ['Class', 'barbarian', 'Barbarian', ['Barbar']],
   ['Class', 'bard', 'Bard', ['Bard']],
   ['Class', 'cleric', 'Cleric', ['Klerik']],
@@ -49,9 +50,9 @@ const commonEntries: readonly CatalogEntry[] = [
   ['Subclass', 'school-of-evocation', 'School of Evocation', ['Škola zaklínání']],
   ['Subclass', 'oath-of-devotion', 'Oath of Devotion', ['Přísaha oddanosti']],
   ['Background', 'acolyte', 'Acolyte', ['Akolyta']],
-  ['Background', 'criminal', 'Criminal', ['Zločinec']],
-  ['Background', 'sage', 'Sage', ['Mudrc']],
-  ['Background', 'soldier', 'Soldier', ['Voják']],
+  ['Background', 'criminal', 'Criminal', ['Zločinec'], ['2024']],
+  ['Background', 'sage', 'Sage', ['Mudrc'], ['2024']],
+  ['Background', 'soldier', 'Soldier', ['Voják'], ['2024']],
   ['Skill', 'acrobatics', 'Acrobatics', ['Akrobacie']],
   ['Skill', 'animal-handling', 'Animal Handling', ['Ovládání zvířat']],
   ['Skill', 'arcana', 'Arcana', ['Mystika']],
@@ -113,8 +114,7 @@ const commonEntries: readonly CatalogEntry[] = [
   ['Condition', 'stunned', 'Stunned', ['Omráčený']],
   ['Condition', 'unconscious', 'Unconscious', ['V bezvědomí']],
   ['Feat', 'grappler', 'Grappler', ['Zápasník']],
-  ['Feat', 'tough', 'Tough', ['Houževnatý']],
-  ['Feat', 'skilled', 'Skilled', ['Zkušený']],
+  ['Feat', 'skilled', 'Skilled', ['Zkušený'], ['2024']],
   ['Spell', 'bless', 'Bless', ['Požehnání']],
   ['Spell', 'cure-wounds', 'Cure Wounds', ['Léčení zranění']],
   ['Spell', 'fireball', 'Fireball', ['Ohnivá koule']],
@@ -128,7 +128,7 @@ const commonEntries: readonly CatalogEntry[] = [
   ['Property', 'versatile', 'Versatile', ['Obouruční použití']],
   ['Weapon', 'longsword', 'Longsword', ['Dlouhý meč']],
   ['Armor', 'chain-mail', 'Chain Mail', ['Kroužková zbroj']],
-  ['Equipment', 'hempen-rope', 'Rope, Hempen', ['Konopné lano']],
+  ['Equipment', 'hempen-rope', 'Rope, Hempen', ['Konopné lano'], ['2014']],
   ['Tool', 'thieves-tools', "Thieves' Tools", ['Zlodějské náčiní']],
   ['Vehicle', 'rowboat', 'Rowboat', ['Veslice']],
   ['CreatureDefinition', 'goblin', 'Goblin', ['Goblin']],
@@ -226,6 +226,7 @@ export interface BuiltInRuleContent {
   searchText: string;
   sourceReference: string;
   typedContent: RulesPackTypedContent;
+  localizations: RulesPackLocalization[];
 }
 
 export function builtInRuleDefinitions(): BuiltInRuleDefinition[] {
@@ -252,13 +253,19 @@ export function builtInRuleContent(
   definitionType: DefinitionType,
   slug: string,
 ): BuiltInRuleContent | undefined {
+  const generated = openSrdContentEntries.find((candidate) => (
+    candidate.rulesetVersion === rulesetVersion
+      && candidate.definitionType === definitionType
+      && candidate.slug === slug
+  ));
+  if (generated) return structuredClone(generated);
   const entry = contentEntries.find((candidate) => (
     candidate[0] === rulesetVersion && candidate[1] === definitionType && candidate[2] === slug
   ));
   if (!entry) return undefined;
   return {
     shortDescription: entry[3], fullDescription: entry[4], searchText: entry[5],
-    sourceReference: entry[6], typedContent: structuredClone(entry[7]),
+    sourceReference: entry[6], typedContent: structuredClone(entry[7]), localizations: [],
   };
 }
 
@@ -292,6 +299,7 @@ export function seedBuiltInRuleDefinitions(database: DatabaseSync): void {
 }
 
 export function builtInRuleRelations(): RuleDefinitionRelation[] {
+  const definitionIds = new Set(builtInRuleDefinitions().map((definition) => definition.id));
   const pairs = [
     ['Lineage', 'hill-dwarf', 'Species', 'dwarf', 'belongsToSpecies'],
     ['Lineage', 'high-elf', 'Species', 'elf', 'belongsToSpecies'],
@@ -309,7 +317,8 @@ export function builtInRuleRelations(): RuleDefinitionRelation[] {
     sourceDefinitionId: definitionId(ruleset.id, version.id, sourceType, sourceSlug),
     targetDefinitionId: definitionId(ruleset.id, version.id, targetType, targetSlug),
     relationType,
-  }))));
+  })).filter((relation) => definitionIds.has(relation.sourceDefinitionId)
+    && definitionIds.has(relation.targetDefinitionId))));
   const versioned = listBuiltInRulesets().flatMap((ruleset) => ruleset.versions
     .filter((version) => version.id === '2024')
     .map((version) => ({
@@ -317,7 +326,8 @@ export function builtInRuleRelations(): RuleDefinitionRelation[] {
       targetDefinitionId: definitionId(ruleset.id, version.id, 'Mastery', 'sap'),
       relationType: 'hasMastery' as const,
     })));
-  return [...shared, ...versioned];
+  return [...shared, ...versioned].filter((relation) => definitionIds.has(relation.sourceDefinitionId)
+    && definitionIds.has(relation.targetDefinitionId));
 }
 
 export function seedBuiltInRuleRelations(database: DatabaseSync): void {

@@ -8,6 +8,7 @@ import {
   ruleDefinitionRelationTypes,
   type RulesPack,
   type RulesPackDefinition,
+  type RulesPackLocalization,
   type RulesPackStatus,
   type RulesPackTypedContent,
   type RulesPackUpdateResult,
@@ -91,9 +92,9 @@ export class RulesPackService {
 
   async update(packId?: string): Promise<RulesPackUpdateResult[]> {
     const rows = this.database.prepare(`
-      SELECT pack_id AS packId, update_url AS updateUrl FROM rules_pack_installations
+      SELECT pack_id AS packId, version, update_url AS updateUrl FROM rules_pack_installations
       WHERE active = 1 ${packId ? 'AND pack_id = ?' : ''}
-    `).all(...(packId ? [packId] : [])) as unknown as Array<{ packId: string; updateUrl: string }>;
+    `).all(...(packId ? [packId] : [])) as unknown as Array<{ packId: string; version: string; updateUrl: string }>;
     if (!rows.length) throw new Error('Požadovaný aktivní balíček pravidel nebyl nalezen.');
     const results: RulesPackUpdateResult[] = [];
     for (const row of rows) {
@@ -110,6 +111,15 @@ export class RulesPackService {
         if (source.length > 5_000_000) throw new Error('Balíček pravidel překročil bezpečný limit velikosti.');
         const candidate = JSON.parse(source) as RulesPack;
         if (candidate.manifest.packId !== row.packId) throw new Error('Stažený balíček má jiné ID.');
+        validatePack(candidate);
+        if (compareVersions(candidate.manifest.version, row.version) < 0) {
+          results.push({
+            status: this.requireStatus(row.packId, row.version),
+            changed: false,
+            rolledBack: false,
+          });
+          continue;
+        }
         results.push(await this.install(candidate));
       } catch (error) {
         this.log?.write({ severity: 'error', category: 'rules-pack', event: 'rules-pack.remote-update-failed',
@@ -203,8 +213,9 @@ export class RulesPackService {
           INSERT INTO rule_definition_documents(
             definition_id, content_schema_version, locale, completeness,
             full_description, content_json, search_text, content_hash,
-            source_reference, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            source_reference, localized_name, short_description,
+            adaptation_attribution, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(definition_id, locale) DO UPDATE SET
             content_schema_version = excluded.content_schema_version,
             completeness = excluded.completeness,
@@ -213,30 +224,55 @@ export class RulesPackService {
             search_text = excluded.search_text,
             content_hash = excluded.content_hash,
             source_reference = excluded.source_reference,
+            localized_name = excluded.localized_name,
+            short_description = excluded.short_description,
+            adaptation_attribution = excluded.adaptation_attribution,
             updated_at = excluded.updated_at
         `);
-        const deleteDocument = this.database.prepare(`
-          DELETE FROM rule_definition_documents WHERE definition_id = ? AND locale = ?
+        const deleteDocuments = this.database.prepare(`
+          DELETE FROM rule_definition_documents WHERE definition_id = ?
         `);
         for (const definition of pack.payload.definitions) {
           if (pack.manifest.schemaVersion === 1) {
-            deleteDocument.run(definition.id, definition.locale);
+            deleteDocuments.run(definition.id);
             continue;
           }
-          const documentValue = {
+          const documents: RulesPackLocalization[] = [{
+            locale: definition.locale,
+            name: definition.name,
+            shortDescription: definition.shortDescription ?? '',
             completeness: definition.completeness ?? 'partial',
+            contentSchemaVersion: definition.contentSchemaVersion ?? 1,
             fullDescription: definition.fullDescription ?? '',
-            typedContent: definition.typedContent ?? null,
-            searchText: definition.searchText ?? '',
-            sourceReference: definition.sourceReference ?? null,
-          };
-          upsertDocument.run(
-            definition.id, definition.contentSchemaVersion ?? 1, definition.locale,
-            definition.completeness ?? 'partial', definition.fullDescription ?? '',
-            definition.typedContent ? JSON.stringify(definition.typedContent) : null,
-            definition.searchText ?? '', hashValue(documentValue),
-            definition.sourceReference ?? null, now, now,
-          );
+            typedContent: definition.typedContent,
+            searchText: definition.searchText,
+            sourceReference: definition.sourceReference,
+            adaptationAttribution: '',
+          }, ...(definition.localizations ?? [])];
+          // A pack version is the complete source of documents for its stable
+          // definition. Removing a locale in an update must not leave stale text.
+          deleteDocuments.run(definition.id);
+          for (const document of documents) {
+            const documentValue = {
+              locale: document.locale,
+              name: document.name,
+              shortDescription: document.shortDescription,
+              completeness: document.completeness,
+              fullDescription: document.fullDescription,
+              typedContent: document.typedContent ?? null,
+              searchText: document.searchText ?? '',
+              sourceReference: document.sourceReference ?? null,
+              adaptationAttribution: document.adaptationAttribution || null,
+            };
+            upsertDocument.run(
+              definition.id, document.contentSchemaVersion, document.locale,
+              document.completeness, document.fullDescription,
+              document.typedContent ? JSON.stringify(document.typedContent) : null,
+              document.searchText ?? '', hashValue(documentValue),
+              document.sourceReference ?? null, document.name, document.shortDescription,
+              document.adaptationAttribution || null, now, now,
+            );
+          }
         }
         const deleteRelations = this.database.prepare(`
           DELETE FROM rule_definition_relations WHERE source_definition_id = ?
@@ -327,6 +363,7 @@ export function bundledRulesPacks(): RulesPack[] {
         typedContent: content.typedContent,
         searchText: content.searchText,
         sourceReference: content.sourceReference,
+        localizations: content.localizations,
       } : {}),
     };
   });
@@ -385,6 +422,7 @@ export function validatePack(pack: RulesPack): void {
       throw new Error('Definice obsahuje neplatné aliasy.');
     }
     if (pack.manifest.schemaVersion === 3) validateContentDocument(definition);
+    validateLocalizations(definition);
     ids.add(definition.id);
     canonicalIds.add(definition.canonicalId);
   }
@@ -398,6 +436,22 @@ export function validatePack(pack: RulesPack): void {
     const key = `${relation.sourceDefinitionId}|${relation.targetDefinitionId}|${relation.relationType}`;
     if (relationKeys.has(key)) throw new Error('Balíček obsahuje duplicitní vztah.');
     relationKeys.add(key);
+  }
+}
+
+function validateLocalizations(definition: RulesPackDefinition): void {
+  if (definition.localizations === undefined) return;
+  if (!Array.isArray(definition.localizations)) throw new Error('Lokalizace definice musí být pole.');
+  const locales = new Set([definition.locale.toLocaleLowerCase('en-US')]);
+  for (const localization of definition.localizations) {
+    const locale = localization.locale.trim().toLocaleLowerCase('en-US');
+    if (!locale || locales.has(locale)) throw new Error('Definice obsahuje duplicitní nebo prázdnou lokalizaci.');
+    if (!localization.name.trim() || typeof localization.shortDescription !== 'string'
+      || !localization.adaptationAttribution.trim()) {
+      throw new Error('Lokalizaci chybí název, popis nebo atribuce adaptace.');
+    }
+    validateContentDocument({ ...definition, ...localization, localizations: undefined });
+    locales.add(locale);
   }
 }
 

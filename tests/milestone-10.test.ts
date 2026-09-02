@@ -30,17 +30,17 @@ describe('Milestone 10 D&Dpedie catalog boundary', () => {
       expect(new Set(first.items.map((item) => item.definitionId)).size).toBe(first.items.length);
 
       const alias = database.dndpedia.search({ query: 'ohniva koule', pageSize: 20 });
-      expect(alias.items.map((item) => item.name)).toEqual(['Fireball', 'Fireball']);
+      expect(alias.items.map((item) => item.name)).toEqual(['Ohnivá koule', 'Ohnivá koule']);
       const canonical = database.dndpedia.search({ query: 'dnd5e:2024:Spell:fireball', pageSize: 20 });
       expect(canonical.items).toEqual([expect.objectContaining({
         definitionId: 'def_dnd5e_2024_spell_fireball', canonicalId: 'dnd5e:2024:Spell:fireball',
       })]);
       expect(database.dndpedia.search({ definitionType: 'Weapon', rulesetVersion: '2024' }).items)
-        .toEqual([expect.objectContaining({ name: 'Longsword' })]);
+        .toEqual([expect.objectContaining({ name: 'Dlouhý meč', locale: 'cs' })]);
     } finally { database.close(); }
   });
 
-  it('resolves ID and canonical ID to the same typed, sourced detail while preserving partial records', async () => {
+  it('resolves ID and canonical ID to the same localized, typed, sourced detail', async () => {
     const { database } = await openDatabase();
     try {
       const byId = database.dndpedia.get('def_dnd5e_2024_spell_fireball');
@@ -48,20 +48,20 @@ describe('Milestone 10 D&Dpedie catalog boundary', () => {
       expect(byCanonical).toEqual(byId);
       expect(byId).toMatchObject({
         completeness: 'full',
-        content: { kind: 'spell', level: 3, school: 'Evocation' },
+        content: { kind: 'spell', level: 3, school: 'Zaklínání' },
         source: {
-          packId: 'dnd5e-srd-5.2.1', packVersion: '2.0.0', locale: 'en', license: 'CC BY 4.0',
+          packId: 'dnd5e-srd-5.2.1', packVersion: '3.0.0', locale: 'cs', license: 'CC BY 4.0',
         },
       });
       expect(byId.content.facts.map((fact) => fact.label)).toContain('Poškození / léčení');
 
       const weapon = database.dndpedia.get('dnd5e:2024:Weapon:longsword');
-      expect(weapon.content).toMatchObject({ kind: 'weapon', damage: '1d8 (1d10 versatile)' });
+      expect(weapon.content).toMatchObject({ kind: 'weapon', damage: expect.stringMatching(/^1k8/) });
       expect(weapon.relatedDefinitions.map((item) => item.name)).toEqual(expect.arrayContaining([
-        'Martial Melee Weapons', 'Versatile', 'Sap',
+        'Válečné zbraně na blízko', 'Obouruční použití', 'Oslabení',
       ]));
-      const partial = database.dndpedia.get('dnd5e:2024:Spell:magic-missile');
-      expect(partial).toMatchObject({ completeness: 'partial', fullDescription: '', content: { kind: 'generic', facts: [] } });
+      const magicMissile = database.dndpedia.get('dnd5e:2024:Spell:magic-missile');
+      expect(magicMissile).toMatchObject({ completeness: 'full', locale: 'cs', content: { kind: 'spell' } });
 
       const ipc = new ChronicleIpcService(database);
       expect(ipc.getEntityCard({ id: byId.definitionId })).toMatchObject({
@@ -103,10 +103,10 @@ describe('Milestone 10 pack and migration safety', () => {
     let database = opened.database;
     try {
       const active = database.rulesPacks.list().find((item) => item.packId === 'dnd5e-srd-5.2.1')!;
-      expect(active).toMatchObject({ version: '2.0.0', schemaVersion: 3, active: true });
+      expect(active).toMatchObject({ version: '3.0.0', schemaVersion: 3, active: true });
       const invalid = structuredClone(bundledRulesPacks().find((pack) => pack.manifest.packId === active.packId)!) as RulesPack;
-      invalid.manifest.version = '2.1.0';
-      invalid.payload.definitions.forEach((definition) => { definition.packVersion = '2.1.0'; });
+      invalid.manifest.version = '3.1.0';
+      invalid.payload.definitions.forEach((definition) => { definition.packVersion = '3.1.0'; });
       const fireball = invalid.payload.definitions.find((definition) => definition.name === 'Fireball')!;
       fireball.typedContent = {
         kind: 'Generic', definitionType: 'Background', facts: [{ key: 'broken', value: 'yes' }],
@@ -114,7 +114,7 @@ describe('Milestone 10 pack and migration safety', () => {
       invalid.manifest.contentHash = testHash(invalid.payload);
       await expect(database.rulesPacks.install(invalid)).rejects.toThrow(/neodpovídá typu Spell/);
       expect(database.rulesPacks.list().find((item) => item.packId === active.packId && item.active))
-        .toMatchObject({ version: '2.0.0', contentHash: active.contentHash });
+        .toMatchObject({ version: '3.0.0', contentHash: active.contentHash });
 
       const raw = rawDatabase(database.path);
       raw.exec('DELETE FROM dndpedia_fts;');
@@ -150,7 +150,7 @@ describe('Milestone 10 pack and migration safety', () => {
 
     const migrated = await ChronicleDatabase.open(directory);
     try {
-      expect(migrated.info).toMatchObject({ schemaVersion: 9, campaignCount: 1, backupCreated: expect.any(String) });
+      expect(migrated.info).toMatchObject({ schemaVersion: 10, campaignCount: 1, backupCreated: expect.any(String) });
       expect(migrated.domain.getCampaign('campaign-schema8')?.name).toBe('Zachovaná kampaň');
       expect(migrated.dndpedia.get('dnd5e:2024:Spell:fireball')).toMatchObject({ completeness: 'full' });
     } finally { migrated.close(); }
